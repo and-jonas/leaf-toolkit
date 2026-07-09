@@ -448,7 +448,10 @@ class Visualizer:
         # Convert single-channel grayscale to 3-channel grayscale
         img_gray = cv2.merge([gray, gray, gray])
 
-        img_bgr[predictions == VisualizationMapping.Focus.Blurry.ACCEPTED_ID] = img_gray[predictions == VisualizationMapping.Focus.Blurry.ACCEPTED_ID]
+        # Ensure the focus prediction mask is 2D for boolean indexing
+        mask = np.squeeze(predictions) == VisualizationMapping.Focus.Blurry.ACCEPTED_ID
+
+        img_bgr[mask] = img_gray[mask]
 
         return img_bgr
 
@@ -543,7 +546,11 @@ class Visualizer:
         """
 
         for class_id, colors in color_mapping.items():
-            centroids = np.where(detections == class_id)
+            detected = np.squeeze(detections)
+            centroids = np.where(detected == class_id)
+            if len(centroids) != 2:
+                raise ValueError(f"Unexpected detection mask shape after squeeze: {detected.shape}")
+
             y_coords, x_coords = centroids
 
             # Draw circles at the specified coordinates
@@ -576,6 +583,8 @@ class Visualizer:
             np.array: Image with overlaid segmentations.
         """
         beta = (1.0 - alpha)
+
+        segmentations = np.squeeze(segmentations, axis=-1)
 
         for class_id, colors in color_mapping.items():
 

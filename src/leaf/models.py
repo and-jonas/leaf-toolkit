@@ -34,7 +34,7 @@ class BaseModel:
         classes_dict: dict, 
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = True, 
+        use_gpu: bool = False, 
         cuda_device: str = 'cuda:0',
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
 
@@ -405,7 +405,7 @@ class TorchscriptTransformer(BaseModel):
         classes_dict: dict,
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = True, 
+        use_gpu: bool = False, 
         cuda_device: str = 'cuda:0',
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
                  ):
@@ -657,7 +657,7 @@ class SymptomsDetection(BaseModel):
                               2: 'rust'},
         debug: bool = False,
         model_name: str = 'latest',
-        use_gpu: bool = True,
+        use_gpu: bool = False,
         cuda_device: str = 'cuda:0',
         keypoints_thresh: float = 0.212,  # optimal for pycnidia with https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.0/yolo11l-pose_t11z7ymj.pt
         max_det: int = 100000,
@@ -1000,7 +1000,7 @@ class FocusSegmentation(BaseModel):
         classes_dict: dict = {1: 'out_of_focus'},
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = True, 
+        use_gpu: bool = False, 
         cuda_device: str = 'cuda:0',
         input_scaling: Union[float, Tuple[float, float]] = 0.25,
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
