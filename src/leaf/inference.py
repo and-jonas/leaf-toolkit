@@ -73,7 +73,7 @@ class Predictor:
         if focus_params is not None:
             self.focus_params.update(focus_params)
         
-    def predict(self, images_src: str, export_dst: str) -> None:
+    def predict(self, images_src: str, export_dst: str, devices: Union[list, None] = None) -> None:
         """
         This method provides a simple interface to predict on images from a specified folder and 
         save the results to a specified location.
@@ -81,6 +81,9 @@ class Predictor:
         Args:
             images_src (str): Path to location of images.
             export_dst (str): Path where the results should be saved.
+            devices (Union[list, None], optional): Optional list of device strings
+                for parallel processing, e.g. ['cuda:0', 'cuda:1'] or
+                ['cpu', 'cpu']. When None, processing runs in single-process mode.
         """
 
         logging.info("Predicting ...")
@@ -95,7 +98,7 @@ class Predictor:
                 **self.symptoms_det_params,
                 export_pattern_pred=f'{export_dst}/symptoms_det/pred',
                 )
-            s_det.predict(images_src)
+            s_det.predict(images_src, devices=devices)
 
             logging.info("Symptoms Detection finished")
 
@@ -109,7 +112,7 @@ class Predictor:
                 **self.symptoms_seg_params,
                 export_pattern_pred=f'{export_dst}/symptoms_seg/pred',
                 )
-            s_seg.predict(images_src)
+            s_seg.predict(images_src, devices=devices)
 
             logging.info("Symptoms Segmentation finished")
 
@@ -123,7 +126,7 @@ class Predictor:
                 **self.organs_params,
                 export_pattern_pred=f'{export_dst}/organs/pred',
                 )
-            o_seg.predict(images_src)
+            o_seg.predict(images_src, devices=devices)
 
             logging.info("Organ Segmentation finished")
 
@@ -138,7 +141,7 @@ class Predictor:
                 **self.focus_params,
                 export_pattern_pred=f'{export_dst}/focus/pred',
                 )
-            f_seg.predict(images_src)
+            f_seg.predict(images_src, devices=devices)
 
             logging.info("Focus Estimation finished")
 

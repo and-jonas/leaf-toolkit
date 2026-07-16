@@ -19,6 +19,31 @@ import matplotlib.pyplot as plt
 from typing import Union, Tuple
 
 from leaf.visualization import save_histogram, save_depth_overlay, save_image
+import multiprocessing as _mp
+
+
+def _parallel_worker(args: tuple) -> None:
+    """
+    Module-level worker function for parallel prediction across multiple devices.
+    Reconstructs the model inside the worker process so that CUDA contexts and
+    torch objects are created in the correct process (required on Windows/macOS
+    where 'spawn' is the default start method).
+
+    Args:
+        args (tuple): (files, model_cls, init_kwargs, device) where
+            files       -- list of Path strings to process
+            model_cls   -- the concrete model class to instantiate
+            init_kwargs -- dict of constructor keyword arguments
+            device      -- 'cpu' or a CUDA device string such as 'cuda:0'
+    """
+    files, model_cls, init_kwargs, device = args
+    use_gpu = device != 'cpu'
+    worker_kwargs = dict(init_kwargs)
+    worker_kwargs['use_gpu'] = use_gpu
+    worker_kwargs['cuda_device'] = device if use_gpu else 'cuda:0'
+    model = model_cls(**worker_kwargs)
+    for file in files:
+        model.predict_image(Path(file))
 
 
 # TODO when no imagesize is given, use full resolution
@@ -34,7 +59,7 @@ class BaseModel:
         classes_dict: dict, 
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = False, 
+        use_gpu: bool = True, 
         cuda_device: str = 'cuda:0',
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
 
@@ -91,12 +116,17 @@ class BaseModel:
         
         raise NotImplementedError
 
-    def predict(self, src: str) -> None:
+    def predict(self, src: str, devices: list = None) -> None:
         """
-        Predicts on a folder or file. Uses pathlib Path internally
+        Predicts on a folder or file. Uses pathlib Path internally.
+        When predicting on a folder you can optionally supply a list of devices
+        to distribute the work across multiple processes (one per device).
 
         Args:
-            src (str): Path to a specific file or folder
+            src (str): Path to a specific file or folder.
+            devices (list, optional): List of device strings to parallelise over,
+                e.g. ['cuda:0', 'cuda:1'] for two GPUs or ['cpu', 'cpu'] to test
+                with two CPU workers. When None (default) runs single-process.
         """
 
         # Check what type of a source it is
@@ -106,7 +136,10 @@ class BaseModel:
             self.predict_image(src_path)
 
         elif src_path.is_dir():
-            self.predict_folder(src_path)
+            if devices and len(devices) > 1:
+                self.predict_folder_parallel(src_path, devices)
+            else:
+                self.predict_folder(src_path)
 
     def predict_folder(self, src: Path) -> None:
         """
@@ -124,6 +157,50 @@ class BaseModel:
         for file in tqdm(files):
             
             self.predict_image(file)
+
+    def predict_folder_parallel(self, src: Path, devices: list) -> None:
+        """
+        Predicts all images in a folder in parallel by distributing them across
+        multiple devices. Each device runs in its own subprocess with its own
+        model instance, so there is no shared state or locking.
+
+        Tip – CPU testing: pass devices=['cpu', 'cpu'] (or more entries) to
+        spawn multiple CPU workers without needing a GPU.
+
+        Note: on Windows the 'spawn' multiprocessing start method is used
+        automatically, which is required for CUDA. Make sure this function is
+        called from within a ``if __name__ == '__main__':`` guard (or from an
+        installed package entry-point) to avoid recursive process spawning.
+
+        Args:
+            src (pathlib.Path): Pathlib Path pointing to a folder.
+            devices (list): List of device strings, e.g.
+                ['cuda:0', 'cuda:1'] or ['cpu', 'cpu'].
+        """
+        if not hasattr(self, '_init_kwargs'):
+            raise AttributeError(
+                "'_init_kwargs' not found on this model instance. "
+                "Parallel prediction requires the concrete model class to store "
+                "its constructor arguments as self._init_kwargs."
+            )
+
+        files = sorted(
+            [file for ext in self.search_pattern for file in src.rglob(ext)]
+        )
+
+        n = len(devices)
+        # Round-robin split so each worker gets roughly the same number of files
+        chunks = [files[i::n] for i in range(n)]
+
+        worker_args = [
+            ([str(f) for f in chunk], type(self), self._init_kwargs, device)
+            for chunk, device in zip(chunks, devices)
+            if chunk  # skip empty chunks when there are fewer files than devices
+        ]
+
+        ctx = _mp.get_context('spawn')
+        with ctx.Pool(len(worker_args)) as pool:
+            pool.map(_parallel_worker, worker_args)
 
     def predict_image(self, src: Path) -> None:
         """
@@ -405,7 +482,7 @@ class TorchscriptTransformer(BaseModel):
         classes_dict: dict,
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = False, 
+        use_gpu: bool = True, 
         cuda_device: str = 'cuda:0',
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
                  ):
@@ -454,6 +531,20 @@ class TorchscriptTransformer(BaseModel):
         # TODO make this 2D
         self.patch_stride = self.patch_sz  
         self.search_pattern = search_pattern
+
+        # Store constructor arguments so predict_folder_parallel can reconstruct
+        # this model inside worker processes.
+        self._init_kwargs = {
+            'export_pattern_pred': export_pattern_pred,
+            'patch_sz': patch_sz,
+            'input_scaling': input_scaling,
+            'classes_dict': classes_dict,
+            'debug': debug,
+            'model_name': model_name,
+            'use_gpu': use_gpu,
+            'cuda_device': cuda_device,
+            'search_pattern': search_pattern,
+        }
 
         self.get_model(model_name)
         
@@ -657,7 +748,7 @@ class SymptomsDetection(BaseModel):
                               2: 'rust'},
         debug: bool = False,
         model_name: str = 'latest',
-        use_gpu: bool = False,
+        use_gpu: bool = True,
         cuda_device: str = 'cuda:0',
         keypoints_thresh: float = 0.212,  # optimal for pycnidia with https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.0/yolo11l-pose_t11z7ymj.pt
         max_det: int = 100000,
@@ -712,6 +803,22 @@ class SymptomsDetection(BaseModel):
         # TODO make this 2D
         self.patch_stride = self.patch_sz  
         self.search_pattern = search_pattern
+
+        # Store constructor arguments so predict_folder_parallel can reconstruct
+        # this model inside worker processes.
+        self._init_kwargs = {
+            'export_pattern_pred': export_pattern_pred,
+            'patch_sz': patch_sz,
+            'input_scaling': input_scaling,
+            'classes_dict': classes_dict,
+            'debug': debug,
+            'model_name': model_name,
+            'use_gpu': use_gpu,
+            'cuda_device': cuda_device,
+            'keypoints_thresh': keypoints_thresh,
+            'max_det': max_det,
+            'search_pattern': search_pattern,
+        }
 
         self.get_model(model_name)
 
@@ -1000,7 +1107,7 @@ class FocusSegmentation(BaseModel):
         classes_dict: dict = {1: 'out_of_focus'},
         debug: bool = False, 
         model_name: str = 'latest',
-        use_gpu: bool = False, 
+        use_gpu: bool = True, 
         cuda_device: str = 'cuda:0',
         input_scaling: Union[float, Tuple[float, float]] = 0.25,
         search_pattern: str = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'],
@@ -1052,6 +1159,21 @@ class FocusSegmentation(BaseModel):
         # TODO make this 2D
         self.patch_stride = self.patch_sz  
         self.search_pattern = search_pattern
+
+        # Store constructor arguments so predict_folder_parallel can reconstruct
+        # this model inside worker processes.
+        self._init_kwargs = {
+            'export_pattern_pred': export_pattern_pred,
+            'patch_sz': patch_sz,
+            'classes_dict': classes_dict,
+            'debug': debug,
+            'model_name': model_name,
+            'use_gpu': use_gpu,
+            'cuda_device': cuda_device,
+            'input_scaling': input_scaling,
+            'search_pattern': search_pattern,
+            'buffer_scaling': buffer_scaling,
+        }
 
         self.get_model(model_name)
  
