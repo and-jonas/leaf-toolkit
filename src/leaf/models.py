@@ -397,10 +397,9 @@ class BaseModel:
             str: path to the downloaded file
         """
 
-        remotefile = urllib.request.urlopen(url)
-        contentdisposition = remotefile.info()['Content-Disposition']
-        _, params = self.parse_name_from_header(contentdisposition)
-        filename = params["filename"]
+        # Extract filename from URL directly (last part after final /)
+        # to avoid making an HTTP request just to check if the file exists locally.
+        filename = url.split('/')[-1]
 
         file_path = Path(filename) if root is None else Path(root) / filename
         file_path.parent.mkdir(parents=True, exist_ok=True)
