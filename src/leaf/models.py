@@ -20,6 +20,7 @@ from typing import Union, Tuple
 
 from leaf.visualization import save_histogram, save_depth_overlay, save_image
 import multiprocessing as _mp
+import sys
 
 
 def _parallel_worker(args: tuple) -> None:
@@ -198,7 +199,12 @@ class BaseModel:
             if chunk  # skip empty chunks when there are fewer files than devices
         ]
 
-        ctx = _mp.get_context('spawn')
+        # On Windows, spawn is required for CUDA; on Linux/macOS, use default (fork).
+        # fork is more efficient and doesn't require if __name__ == '__main__': guard.
+        if sys.platform == 'win32':
+            ctx = _mp.get_context('spawn')
+        else:
+            ctx = _mp.get_context()
         with ctx.Pool(len(worker_args)) as pool:
             pool.map(_parallel_worker, worker_args)
 
