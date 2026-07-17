@@ -1,4 +1,4 @@
-from leaf import get_model_urls_for_config, download_models_for_config
+from leaf import get_model_urls_for_config, download_models_for_config, download_test_images
 from leaf import models
 from leaf.visualization import CanopyVisualizer
 from leaf.metrics import canopy_evaluation_wrapper
@@ -17,6 +17,7 @@ urls = get_model_urls_for_config(config_name='flattened_leaves', config_path='co
 downloaded = download_models_for_config()
 downloaded = download_models_for_config(config_name="canopy_landscape")
 downloaded = download_models_for_config(config_name="flattened_leaves")
+downloaded = download_test_images(root="test/images")
 
 # # test models using the canopy_portrait config
 # models.test()
