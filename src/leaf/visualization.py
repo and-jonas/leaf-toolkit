@@ -584,7 +584,7 @@ class Visualizer:
         """
         beta = (1.0 - alpha)
 
-        segmentations = np.squeeze(segmentations, axis=-1)
+        # segmentations = np.squeeze(segmentations, axis=-1) ## required when processing on CPU ??
 
         for class_id, colors in color_mapping.items():
 
