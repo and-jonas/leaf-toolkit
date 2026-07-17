@@ -386,12 +386,14 @@ class BaseModel:
         """
         raise NotImplementedError
     
-    def test(self) -> None:
+    def test(self, root: str = 'test/images') -> None:
         """
-        A test method to see if inference can be done sucessfully. It downloads a sample image to test/images and 
-        predicts on it
+        A test method to see if inference can be done sucessfully. It uses a bundled sample image
+        from test/images and predicts on it.
         """
-        test_name = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v0.3.0/BF0A1199_4096px.png', root='test/images')
+        from leaf.model_registry import download_test_images
+
+        test_name = next(iter(download_test_images(root=root).values()))
         self.predict(test_name)
 
     def download_file(self, url: str, root: str = 'models') -> str:

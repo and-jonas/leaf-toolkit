@@ -40,6 +40,10 @@ _MODEL_URLS: Dict[tuple[str, str], str] = {
 
 _MODULE_NAMES = {'symptoms_det', 'symptoms_seg', 'organs', 'focus'}
 
+_TEST_IMAGE_URLS: Dict[str, str] = {
+    'default': 'https://github.com/RadekZenkl/leaf-models/releases/download/v0.3.0/BF0A1199_4096px.png',
+}
+
 
 def get_config(config_name: str = 'canopy_portrait', config_path: str = 'config') -> dict:
     """Load a YAML config from the package config directory."""
@@ -129,5 +133,23 @@ def download_models_for_config(
     downloaded: Dict[str, str] = {}
     for module_name, url in urls.items():
         downloaded[module_name] = download_file(url, root=model_root)
+
+    return downloaded
+
+
+def get_test_image_urls() -> Dict[str, str]:
+    """Return the download URLs for bundled test images."""
+    return dict(_TEST_IMAGE_URLS)
+
+
+def download_test_images(root: str = 'test/images') -> Dict[str, str]:
+    """Download the bundled test images, skipping files that already exist."""
+    root_path = Path(root)
+    if not root_path.is_absolute():
+        root_path = Path(__file__).resolve().parents[2] / root_path
+
+    downloaded: Dict[str, str] = {}
+    for image_name, url in get_test_image_urls().items():
+        downloaded[image_name] = download_file(url, root=str(root_path))
 
     return downloaded
