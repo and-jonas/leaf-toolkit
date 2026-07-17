@@ -21,6 +21,7 @@ from typing import Union, Tuple
 from leaf.visualization import save_histogram, save_depth_overlay, save_image
 import multiprocessing as _mp
 import sys
+import os
 
 
 def _parallel_worker(args: tuple) -> None:
@@ -39,9 +40,17 @@ def _parallel_worker(args: tuple) -> None:
     """
     files, model_cls, init_kwargs, device = args
     use_gpu = device != 'cpu'
+
+    # Bind worker to one physical GPU and use local cuda:0 in-process.
+    # This keeps compatibility with backends that only support cuda:0.
+    local_cuda_device = 'cuda:0'
+    if use_gpu and isinstance(device, str) and device.startswith('cuda:'):
+        gpu_index = device.split(':', 1)[1]
+        os.environ['CUDA_VISIBLE_DEVICES'] = gpu_index
+
     worker_kwargs = dict(init_kwargs)
     worker_kwargs['use_gpu'] = use_gpu
-    worker_kwargs['cuda_device'] = device if use_gpu else 'cuda:0'
+    worker_kwargs['cuda_device'] = local_cuda_device if use_gpu else 'cuda:0'
     model = model_cls(**worker_kwargs)
     for file in files:
         model.predict_image(Path(file))
@@ -87,8 +96,9 @@ class BaseModel:
                 insights. Defaults to False.
             model_name (str): Which model should be used. For this refer to model zoo. Defaults to 'latest'.
             use_gpu (bool, optional): When true the inference is run on a GPU. Defaults to True.
-            cuda_device (str, optional): which cuda device to use. Not recommended to use. Rather use the 
-                environment variable export CUDA_VISIBLE_DEVICES = ... . Defaults to 'cuda:0'.
+            cuda_device (str, optional): which cuda device to use. For robust compatibility,
+                prefer selecting the physical GPU via CUDA_VISIBLE_DEVICES and using
+                local 'cuda:0' inside each process. Defaults to 'cuda:0'.
             search_pattern (str, optional): List of image extensions used to search for images. 
                 Defaults to ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'].
 
@@ -512,8 +522,9 @@ class TorchscriptTransformer(BaseModel):
                 insights. Defaults to False.
             model_name (str): Which model should be used. For this refer to model zoo. Defaults to 'latest'.
             use_gpu (bool, optional): When true the inference is run on a GPU. Defaults to True.
-            cuda_device (str, optional): which cuda device to use. Not recommended to use. Rather use the 
-                environment variable export CUDA_VISIBLE_DEVICES = ... . Defaults to 'cuda:0'.
+            cuda_device (str, optional): which cuda device to use. For robust compatibility,
+                prefer selecting the physical GPU via CUDA_VISIBLE_DEVICES and using
+                local 'cuda:0' inside each process. Defaults to 'cuda:0'.
             search_pattern (str, optional): List of image extensions used to search for images. 
                 Defaults to ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG'].
 
@@ -777,9 +788,10 @@ class SymptomsDetection(BaseModel):
                 insights. Defaults to False.
             model_name (str, optional): Which model should be used. For this refer to model zoo. Defaults to 'latest'.
             use_gpu (bool, optional): When true the inference is run on a GPU. Defaults to True.
-            cuda_device (str, optional): which cuda device to use. Not recommended to use. Rather use the 
-                environment variable export CUDA_VISIBLE_DEVICES = ... . For the current version of ultralytics only 'cuda:0' works 
-                as pointed out in https://github.com/ultralytics/ultralytics/issues/5801 . Defaults to 'cuda:0'.
+            cuda_device (str, optional): which cuda device to use. Prefer selecting the
+                physical GPU via CUDA_VISIBLE_DEVICES and using local 'cuda:0' inside
+                each process. This is compatible with Ultralytics setups that only
+                support local 'cuda:0'. Defaults to 'cuda:0'.
             keypoints_thresh (float, optional): Confidence threshold for acceptance of predictions. Typically try to use
                 a value that optimizes the f1 score during training. Defaults to 0.212.
             search_pattern (str, optional):  List of image extensions used to search for images. 
@@ -797,7 +809,7 @@ class SymptomsDetection(BaseModel):
         self.input_scaling = input_scaling if type(input_scaling) == tuple else (input_scaling, input_scaling)
 
         self.use_gpu = use_gpu
-        self.cuda_device = cuda_device  # Please note that only cuda:0 works as pointed out in https://github.com/ultralytics/ultralytics/issues/5801
+        self.cuda_device = cuda_device  # Prefer local cuda:0; select physical GPU via CUDA_VISIBLE_DEVICES.
         self.model_path = None
 
         self.keypoints_thresh = keypoints_thresh
@@ -1133,8 +1145,9 @@ class FocusSegmentation(BaseModel):
                 insights.. Defaults to False.
             model_name (str, optional): Which model should be used. For this refer to model zoo. Defaults to 'latest'.
             use_gpu (bool, optional):  When true the inference is run on a GPU. Defaults to True.
-            cuda_device (str, optional): which cuda device to use. Not recommended to use. Rather use the 
-                environment variable export CUDA_VISIBLE_DEVICES = ... . Defaults to 'cuda:0'.
+            cuda_device (str, optional): which cuda device to use. For robust compatibility,
+                prefer selecting the physical GPU via CUDA_VISIBLE_DEVICES and using
+                local 'cuda:0' inside each process. Defaults to 'cuda:0'.
             input_scaling (Union[float, Tuple[float, float]], optional): If one number is provide, the scaling is done symmetrically.
                 It denotes a scaling factor applied before inference. The results are scaled back to the original resolution
                 before saving. Defaults to 0.25.
