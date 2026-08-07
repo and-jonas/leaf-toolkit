@@ -117,9 +117,15 @@ class BaseModel:
             src (pathlib.Path): Pathlib Path pointing to a folder.
         """
 
-        files = sorted(
-            [file for ext in self.search_pattern for file in src.rglob(ext)]
-        )
+        raw_files = [file for ext in self.search_pattern for file in src.rglob(ext)]
+
+        # Deduplicate for case-insensitive filesystems (e.g. Windows)
+        dedup = {}
+        for file in raw_files:
+            normalized = str(file.resolve()).casefold()
+            dedup[normalized] = file.resolve()
+
+        files = sorted(dedup.values())
         
         for file in tqdm(files):
             

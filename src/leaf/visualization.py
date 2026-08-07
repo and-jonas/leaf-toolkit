@@ -6,6 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class BaseVisMap:
     """
@@ -236,7 +237,7 @@ class Visualizer:
 
         return data_container
 
-    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.JPG', '*.png']) -> list[Path]:
+    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png']) -> list[Path]:
         """
         Recursively finds images under the specified root directory.
 
@@ -250,7 +251,14 @@ class Visualizer:
         images = []
         for ext in img_extensions:
             images.extend(Path(search_root).rglob(ext))
-        images = [path for path in images]  # convert to a list
+
+        # Deduplicate for case-insensitive filesystems (e.g. Windows)
+        dedup = {}
+        for path in images:
+            normalized = str(path.resolve()).casefold()
+            dedup[normalized] = path.resolve()
+
+        images = list(dedup.values())
         # images = sorted(images)
         images = sorted(images, key=lambda p: p.name)  # This sorts the list based on filenames instead of complete filepath
         return images
@@ -266,45 +274,57 @@ class Visualizer:
 
         logging.info(f"Visualizing: {len(data)} images")
 
-        for data_set in tqdm(data):
-
+        def _process_one(data_set: dict) -> None:
             if self.vis_all:
                 self.visualize_all(data_set)
 
             if self.vis_symptoms:
                 self.visualize_symptoms(data_set)
-            
+
+            # Read RGB once and reuse across individual visualizations
+            rgb_cache = None
+
             if self.vis_organs:
+                if rgb_cache is None:
+                    rgb_cache = self.read_image(data_set['rgb'])
                 img_bgr = self.visualize_organs(
                     self.read_image(data_set['organs'], grayscale=True),
-                    self.read_image(data_set['rgb']), 
-                    )
-                
+                    rgb_cache.copy(),
+                )
                 self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'organs/vis')
 
             if self.vis_focus:
+                if rgb_cache is None:
+                    rgb_cache = self.read_image(data_set['rgb'])
                 img_bgr = self.visualize_focus(
                     self.read_image(data_set['focus'], grayscale=True),
-                    self.read_image(data_set['rgb']),
-                    )
-                
+                    rgb_cache.copy(),
+                )
                 self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'focus/vis')
 
             if self.vis_symptoms_det:
+                if rgb_cache is None:
+                    rgb_cache = self.read_image(data_set['rgb'])
                 img_bgr = self.visualize_symptoms_det(
                     self.read_image(data_set['symptoms_det'], grayscale=True),
-                    self.read_image(data_set['rgb']),
-                    )
-                
+                    rgb_cache.copy(),
+                )
                 self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_det/vis')
 
             if self.vis_symptoms_seg:
+                if rgb_cache is None:
+                    rgb_cache = self.read_image(data_set['rgb'])
                 img_bgr = self.visualize_symptoms_seg(
                     self.read_image(data_set['symptoms_seg'], grayscale=True),
-                    self.read_image(data_set['rgb']),
-                    )
-                
+                    rgb_cache.copy(),
+                )
                 self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_seg/vis')
+
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_process_one, data_set) for data_set in data]
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                future.result()
 
     def visualize_all(self, data_set: dict) -> None:
         """
@@ -584,7 +604,10 @@ class Visualizer:
         """
         beta = (1.0 - alpha)
 
-        # segmentations = np.squeeze(segmentations, axis=-1) ## required when processing on CPU ??
+        # Normalize potential HxWx1 masks (observed on some platforms) to HxW
+        segmentations = np.squeeze(segmentations)
+        if segmentations.ndim != 2:
+            raise ValueError(f"Unexpected segmentation mask shape: {segmentations.shape}")
 
         for class_id, colors in color_mapping.items():
 
