@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from pathlib import Path
 import cv2
@@ -321,7 +322,9 @@ class Visualizer:
                 self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_seg/vis')
 
         # max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
-        max_workers = 2
+        # max_workers = 2
+        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))
+        max_workers = max(1, min(len(data), int(n_cpus * 0.75)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_process_one, data_set) for data_set in data]
             for future in tqdm(as_completed(futures), total=len(futures)):
