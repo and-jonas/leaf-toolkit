@@ -4,8 +4,14 @@ from typing import Union
 
 from hydra import compose, initialize
 from omegaconf import OmegaConf
+from collections import defaultdict
 
 from leaf.models import SymptomsDetection, SymptomsSegmentation, OrgansSegmentation, FocusSegmentation
+from leaf.preprocessing import Preprocessor
+from pathlib import Path
+import cv2
+
+import matplotlib.pyplot as plt
 
 
 class Predictor:
@@ -17,6 +23,7 @@ class Predictor:
 
     def __init__(self,
                  config_path: str = "config", config_name: str = "canopy_portrait",
+                 preprocessing_params: Union[dict, None] = None,
                  symptoms_det_params: Union[dict, None] = None,
                  symptoms_seg_params: Union[dict, None] = None,
                  organs_params: Union[dict, None] = None,
@@ -55,6 +62,7 @@ class Predictor:
             cfg = compose(config_name=config_name)
             config = OmegaConf.to_container(cfg, resolve=True)
 
+        self.preprocessing_params = config.get('preprocessing_params', None)
         self.module_params = config.get('module_params', None)
         self.symptoms_det_params = config.get('symptoms_det_params', None)
         self.symptoms_seg_params = config.get('symptoms_seg_params', None)
@@ -62,6 +70,8 @@ class Predictor:
         self.focus_params =  config.get('focus_params', None)
 
         # override with user params
+        if preprocessing_params is not None:
+            self.preprocessing_params.update(preprocessing_params)
         if module_params is not None:
             self.module_params.update(module_params)
         if symptoms_det_params is not None:
@@ -88,61 +98,68 @@ class Predictor:
         torch.cuda.empty_cache()
         
 
-        if self.module_params['symptoms_det']:
-            logging.info("Symptoms Detection is running ... ")
+        # instantiate single preprocessor (rotate/crop) and models
+        # allow per-config image crop parameters under `module_params['preprocessing']`
+        preproc_cfg = self.preprocessing_params if self.preprocessing_params else {}
+        crop_sz = tuple(preproc_cfg.get('crop_sz')) if preproc_cfg.get('crop_sz') else None
+        crop_offsets = tuple(preproc_cfg.get('crop_offsets')) if preproc_cfg.get('crop_offsets') else None
+        preproc = Preprocessor()
+        if crop_sz is not None:
+            preproc.crop_sz = crop_sz
+        if crop_offsets is not None:
+            preproc.crop_offsets = crop_offsets
 
-            s_det = SymptomsDetection(
+        models = {}
+        if self.module_params.get('symptoms_det'):
+            models['symptoms_det'] = SymptomsDetection(
                 **self.symptoms_det_params,
                 export_pattern_pred=f'{export_dst}/symptoms_det/pred',
-                )
-            s_det.predict(images_src)
-
-            logging.info("Symptoms Detection finished")
-
-            logging.info("Emptying CUDA cache")
-            torch.cuda.empty_cache()
-
-        if self.module_params['symptoms_seg']:
-            logging.info("Symptoms Segmentation is running ...")
-
-            s_seg = SymptomsSegmentation(
+            )
+        if self.module_params.get('symptoms_seg'):
+            models['symptoms_seg'] = SymptomsSegmentation(
                 **self.symptoms_seg_params,
                 export_pattern_pred=f'{export_dst}/symptoms_seg/pred',
-                )
-            s_seg.predict(images_src)
-
-            logging.info("Symptoms Segmentation finished")
-
-            logging.info("Emptying CUDA cache")
-            torch.cuda.empty_cache()
-
-        if self.module_params['organs']:
-            logging.info("Organ Segmentation is running ...")
-
-            o_seg = OrgansSegmentation(
+            )
+        if self.module_params.get('organs'):
+            models['organs'] = OrgansSegmentation(
                 **self.organs_params,
                 export_pattern_pred=f'{export_dst}/organs/pred',
-                )
-            o_seg.predict(images_src)
-
-            logging.info("Organ Segmentation finished")
-
-            logging.info("Emptying CUDA cache")
-            torch.cuda.empty_cache()
-
-
-        if self.module_params['focus']:
-            logging.info("Focus Estimation is running ...")
-
-            f_seg = FocusSegmentation(
+            )
+        if self.module_params.get('focus'):
+            models['focus'] = FocusSegmentation(
                 **self.focus_params,
                 export_pattern_pred=f'{export_dst}/focus/pred',
-                )
-            f_seg.predict(images_src)
+            )
 
-            logging.info("Focus Estimation finished")
+        # gather files
+        src_path = Path(images_src)
+        search_pattern = ['*.jpg', '*.JPG', '*.jpeg', '*.png', '*.PNG']
+        if src_path.is_dir():
+            raw_files = [file for ext in search_pattern for file in src_path.rglob(ext)]
+            dedup = {}
+            for file in raw_files:
+                normalized = str(file.resolve()).casefold()
+                dedup[normalized] = file.resolve()
+            files = sorted(dedup.values())
+        elif src_path.is_file():
+            files = [src_path.resolve()]
+        else:
+            logging.error(f"images_src not found: {images_src}")
+            return
 
-            logging.info("Emptying CUDA cache")
-            torch.cuda.empty_cache()
+        for file in files:
+            logging.debug(f"Processing {file}")
+            img = cv2.imread(str(file))
+            if img is None:
+                logging.error(f"Failed to read {file}")
+                continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+            # run module-agnostic preprocessing once
+            img_proc = preproc.preprocess_image(img)
+
+            # pass processed image to each model (models decide their own per-image and per-patch preprocessing)
+            for name, model in models.items():
+                model.predict_from_array(img_proc, file)
+                              
         logging.info("Predicting finished")

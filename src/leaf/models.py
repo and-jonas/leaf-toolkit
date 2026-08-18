@@ -152,11 +152,10 @@ class BaseModel:
         # Convert from cv2 BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # TODO revise this 
+        # default behavior: process from disk (backwards compatible)
         # subdivide input
         patches = self.subdivide_image(image, src)
         if patches is None:
-            # TODO add more info here 
             logging.error(f"Skipping image: {str(src)}")
             return
 
@@ -176,6 +175,34 @@ class BaseModel:
         result = self.merge_patches(results)
 
         # Saving predictions
+        if not self.debug:
+            self.save_predictions(str(src), result)
+
+    def predict_from_array(self, image: np.array, src: Path) -> None:
+        """Predict from an in-memory RGB image array (image is RGB).
+
+        This mirrors `predict_image` but avoids re-reading from disk so a central
+        pipeline can read the image once, apply general preprocessing (rotate/crop),
+        then pass the processed image to multiple modules.
+        """
+        patches = self.subdivide_image(image, src)
+        if patches is None:
+            logging.error(f"Skipping image: {str(src)}")
+            return
+
+        results = np.zeros((patches.shape[:-1]))
+        n_patches = patches.shape[:2]
+
+        for indices in np.ndindex(n_patches):
+            id_str = '-'.join(map(str, indices))
+            self.current_input_name = str(src.with_name(f"{src.stem}_{id_str}{src.suffix}"))
+
+            patch = patches[indices]
+            model_input = self.rgb_image2input(patch)
+            results[indices] = self.infer_image(model_input)
+
+        result = self.merge_patches(results)
+
         if not self.debug:
             self.save_predictions(str(src), result)
 
