@@ -237,7 +237,7 @@ class Visualizer:
 
         return data_container
 
-    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png']) -> list[Path]:
+    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '.JPG', '.JPEG', '.PNG']) -> list[Path]:
         """
         Recursively finds images under the specified root directory.
 
