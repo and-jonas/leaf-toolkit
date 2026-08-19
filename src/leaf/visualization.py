@@ -346,43 +346,39 @@ class Visualizer:
         # save the results
         self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'visualization_symptoms')
 
-    def _process_one_base(self, data_set: dict, rgb_cache: np.array) -> None:
+    def _process_one_base(self, data_set: dict, img_bgr: np.ndarray) -> None:
         """
-        Shared visualization logic for a single dataset given a prepared BGR image `rgb_cache`.
+        Process one data_set. Ensure the original preprocessed RGB (cropped+rotated)
+        is preserved and that each module receives a fresh copy so overlays don't
+        accumulate across separate module outputs.
         """
+        # preserve canonical preprocessed image
+        base_rgb = img_bgr.copy()
+
+        # combined/full visualization should operate on a copy
         if self.vis_all:
-            self.visualize_all(data_set, img_bgr=rgb_cache)
+            self.visualize_all(data_set, img_bgr=base_rgb.copy())
 
+        # symptoms accumulation (allowed to combine symptom classes)
         if self.vis_symptoms:
-            self.visualize_symptoms(data_set, img_bgr=rgb_cache)
+            self.visualize_symptoms(data_set, img_bgr=base_rgb.copy())
 
+        # Per-module visualizations must get fresh copies to avoid cross-contamination
         if self.vis_organs:
-            img_bgr = self.visualize_organs(
-                self.read_image(data_set['organs'], grayscale=True),
-                rgb_cache.copy(),
-            )
-            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'organs/vis')
-
-        if self.vis_focus:
-            img_bgr = self.visualize_focus(
-                self.read_image(data_set['focus'], grayscale=True),
-                rgb_cache.copy(),
-            )
-            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'focus/vis')
+            overlay = self.visualize_organs(self.read_image(data_set['organs'], grayscale=True), img_bgr=base_rgb.copy())
+            self.save_visualization(str(Path(data_set['rgb']).stem), overlay, 'organs/vis')
 
         if self.vis_symptoms_det:
-            img_bgr = self.visualize_symptoms_det(
-                self.read_image(data_set['symptoms_det'], grayscale=True),
-                rgb_cache.copy(),
-            )
-            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_det/vis')
+            overlay = self.visualize_symptoms_det(self.read_image(data_set['symptoms_det'], grayscale=True), img_bgr=base_rgb.copy())
+            self.save_visualization(str(Path(data_set['rgb']).stem), overlay, 'symptoms_det/vis')
 
         if self.vis_symptoms_seg:
-            img_bgr = self.visualize_symptoms_seg(
-                self.read_image(data_set['symptoms_seg'], grayscale=True),
-                rgb_cache.copy(),
-            )
-            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_seg/vis')
+            overlay = self.visualize_symptoms_seg(self.read_image(data_set['symptoms_seg'], grayscale=True), img_bgr=base_rgb.copy())
+            self.save_visualization(str(Path(data_set['rgb']).stem), overlay, 'symptoms_seg/vis')
+
+        if self.vis_focus:
+            overlay = self.visualize_focus(self.read_image(data_set['focus'], grayscale=True), img_bgr=base_rgb.copy())
+            self.save_visualization(str(Path(data_set['rgb']).stem), overlay, 'focus/vis')
 
     def read_image(self, path: str | Path, grayscale: bool = False, bgr: bool = True) -> np.array:
         """
@@ -709,7 +705,7 @@ class CanopyVisualizer(Visualizer):
         self.preprocessing_params = config.get('preprocessing_params', None)
 
 
-    def visualize(self) -> None:
+    def visualize(self, parallel: bool = True) -> None:
         """
         Override of base visualize that applies preprocessing (rotation/crop) before visualization.
         """
@@ -729,31 +725,26 @@ class CanopyVisualizer(Visualizer):
                 preproc.crop_offsets = crop_offsets
 
         def _process_one_canopy(data_set: dict) -> None:
+
             # read original and apply preproc
             orig_bgr = self.read_image(data_set['rgb'])
-            try:
-                orig_rgb = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2RGB)
-            except Exception:
-                orig_rgb = orig_bgr
-
+            orig_rgb = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2RGB)
             proc_out = preproc.preprocess_image(orig_rgb)
             img_proc = proc_out[0] if isinstance(proc_out, tuple) else proc_out
-            if img_proc is None:
-                img_proc = orig_rgb
-
-            try:
-                rgb_cache = cv2.cvtColor(img_proc, cv2.COLOR_RGB2BGR)
-            except Exception:
-                rgb_cache = img_proc
+            rgb_cache = cv2.cvtColor(img_proc, cv2.COLOR_RGB2BGR)
 
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
         max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 2))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
-            for future in tqdm(as_completed(futures), total=len(futures)):
-                future.result()
+        if parallel:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
+                for future in tqdm(as_completed(futures), total=len(futures)):
+                    future.result()
+        else:
+            for data_set in tqdm(data, total=len(data)):
+                _process_one_canopy(data_set)
 
 
 class FlattenedVisualizer(Visualizer):
