@@ -737,7 +737,8 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 4))
+        # max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 4))
+        max_workers = 1
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
