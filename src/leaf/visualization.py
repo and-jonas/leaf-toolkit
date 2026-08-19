@@ -675,17 +675,12 @@ class CanopyVisualizer(Visualizer):
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
         are adjusted to cover the canopy visualization use case.
 
-        
-        config_path (str, optional): relative path from the location of this file to a config directory. 
-            Defaults to "config".
-        config_name (str, optional): name of a config within the config_path directory. 
-            New configurations can be added. Defaults to "canopy_portrait".
+        Args:
+            config_path (str, optional): relative path from the location of this file to a config directory. 
+                Defaults to "config".
+            config_name (str, optional): name of a config within the config_path directory. 
+                New configurations can be added. Defaults to "canopy_portrait".
         """
-
-        # canopy-specific parameters for preprocessing (rotation/crop)
-        self.config_path=config_path
-        self.config_name=config_name
-        self.preprocessing_params=preprocessing_params
 
         super().__init__(
             vis_all=vis_all,
@@ -704,6 +699,15 @@ class CanopyVisualizer(Visualizer):
             symptoms_det_subfolder=symptoms_det_subfolder,
             symptoms_seg_subfolder=symptoms_seg_subfolder,
         )
+
+        # load base config
+        with initialize(version_base=None, config_path=config_path):
+            cfg = compose(config_name=config_name)
+            config = OmegaConf.to_container(cfg, resolve=True)
+
+        # canopy-specific parameters for preprocessing (rotation/crop)
+        self.preprocessing_params = config.get('preprocessing_params', None)
+
 
     def visualize(self) -> None:
         """
@@ -745,7 +749,7 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 2))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
             for future in tqdm(as_completed(futures), total=len(futures)):
