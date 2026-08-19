@@ -9,18 +9,26 @@ from leaf.inference import Predictor
 
 # from $SCRATCH to reduce I/O limitations on the server
 # ROOT_DIR = Path("O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
-ROOT_DIR = Path("/agroscope/Data-Work-CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
+# ROOT_DIR = Path("/agroscope/Data-Work-CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
+ROOT_DIR = Path("O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260622_Uitikon")
+# ROOT_DIR = Path("/agroscope/Data-Work-CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260622_Uitikon")
 
 # list all directories to process
-dirs_to_process = [d for d in Path(ROOT_DIR).iterdir() if d.is_dir()]
+dirs_to_process = [
+    d
+    for camera_dir in Path(ROOT_DIR).iterdir()
+    if camera_dir.is_dir() and camera_dir.name.startswith("Camera")
+    for d in camera_dir.iterdir()
+    if d.is_dir()
+]
 
-# # predict
-# pred = Predictor(config_name='canopy_portrait_2')
-# for d in dirs_to_process:
-#     pred.predict(
-#         images_src=d, 
-#         export_dst= Path(str(d).replace("B_Data", "E_Work")) / "predictions"
-#     )
+# predict
+pred = Predictor(config_name='canopy_portrait_2')
+for d in dirs_to_process:
+    pred.predict(
+        images_src=d, 
+        export_dst= Path(str(d).replace("B_Data", "E_Work")) / "predictions"
+    )
 
 # visualize
 for d in dirs_to_process:
