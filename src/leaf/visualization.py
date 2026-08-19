@@ -247,7 +247,7 @@ class Visualizer:
 
         return data_container
 
-    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '.JPG', '.JPEG', '.PNG']) -> list[Path]:
+    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']) -> list[Path]:
         """
         Recursively finds images under the specified root directory.
 
@@ -736,12 +736,17 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 2))
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 4))
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
+
                 for future in tqdm(as_completed(futures), total=len(futures)):
-                    future.result()
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"\nWorker failed: {type(e).__name__}: {e}")
+                        raise
         else:
             for data_set in tqdm(data, total=len(data)):
                 _process_one_canopy(data_set)

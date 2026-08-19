@@ -3,8 +3,8 @@
 #SBATCH --job-name=sshd
 #SBATCH --time=04:00:00
 #SBATCH --output=%x_%j_%N.log
-#SBATCH --mem-per-cpu=8G
-#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=24G
+#SBATCH --cpus-per-task=8
 
 PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
 
