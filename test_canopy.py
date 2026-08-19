@@ -9,11 +9,13 @@ from leaf.inference import Predictor
 pred = Predictor(config_name='canopy_portrait_2')
 
 # from $SCRATCH to reduce I/O limitations on the server
-# dir_to_process = Path("O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
-dir_to_process = Path("/agroscope/Data-Work_CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
+# BASE_DIR = Path("O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
+BASE_DIR = Path("/agroscope/Data-Work_CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
 
-# predict
-pred.predict(
-    images_src=dir_to_process, 
-    export_dst=dir_to_process / "predictions"
-)
+dirs_to_process = [d for d in Path(BASE_DIR).iterdir() if d.is_dir()]
+
+for d in dirs_to_process:
+    pred.predict(
+        images_src=d, 
+        export_dst=Path(str(d).replace("B_Data", "E_Work") / "predictions")
+    )
