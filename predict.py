@@ -1,14 +1,31 @@
 import os
 from pathlib import Path
 
-from leaf.visualization import Path
 from leaf.inference import Predictor
 
 
-ROOT_DIR = Path(
+# local
+ROOT_DIR_LOCAL = Path(
     "O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/"
     "Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260622_Uitikon"
 )
+
+# remote
+ROOT_DIR_SERVER = Path(
+    "/agroscope/Data-Work-CH/22_Plant_Production-CH/224_Digitalisation/"
+    "Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260622_Uitikon"
+)
+
+# find relevant
+if ROOT_DIR_LOCAL.exists():
+    ROOT_DIR = ROOT_DIR_LOCAL
+elif ROOT_DIR_SERVER.exists():
+    ROOT_DIR = ROOT_DIR_SERVER
+else:
+    raise FileNotFoundError("Could not find the data directory on either local or server path.")
+
+print(f"Using ROOT_DIR: {ROOT_DIR}")
+
 
 # Find all directories directly inside Camera* directories
 dirs_to_process = sorted([

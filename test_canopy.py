@@ -1,8 +1,8 @@
 from leaf import get_model_urls_for_config, download_models_for_config
 from leaf import models
 from leaf.visualization import CanopyVisualizer
-from leaf.visualization import Path
 from leaf.inference import Predictor
+from pathlib import Path
 
 # # pre-download models, default canopy_portrait
 # downloaded = download_models_for_config()
