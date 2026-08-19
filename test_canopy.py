@@ -31,4 +31,4 @@ for d in dirs_to_process:
         src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
         rgb_root=d,
         export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions")
-    vis.visualize(parallel=False)
+    vis.visualize(parallel=True)
