@@ -8,6 +8,13 @@ import matplotlib.colors as mcolors
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from typing import Union
+
+from hydra import compose, initialize
+from omegaconf import OmegaConf
+from collections import defaultdict
+from leaf.preprocessing import Preprocessor
+
 class BaseVisMap:
     """
     Base class for visualization mapping.
@@ -120,7 +127,7 @@ class Visualizer:
             organs_subfolder: str = 'organs/pred',
             focus_subfolder: str = 'focus/pred',
             symptoms_det_subfolder: str = 'symptoms_det/pred',
-            symptoms_seg_subfolder: str = 'symptoms_seg/pred',
+            symptoms_seg_subfolder: str = 'symptoms_seg/pred'
         ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized.
@@ -142,7 +149,8 @@ class Visualizer:
             symptoms_det_subfolder (str): Path to symptom detection predictions.
             symptoms_seg_subfolder (str): Path to symptom segmentation predictions.
         """
-        
+
+        # no config/preprocessing loaded in base Visualizer; specialized visualizers may handle it
         self.vis_all = vis_all
         self.vis_symptoms = vis_symptoms
         self.visualize_acceptance = visualize_acceptance
@@ -159,6 +167,8 @@ class Visualizer:
         self.focus_subfolder = focus_subfolder
         self.symptoms_det_subfolder = symptoms_det_subfolder
         self.symptoms_seg_subfolder = symptoms_seg_subfolder
+
+        # base Visualizer does not accept preprocessing parameters
 
     def map_data(self) -> list[dict]:
         """
@@ -275,50 +285,9 @@ class Visualizer:
         logging.info(f"Visualizing: {len(data)} images")
 
         def _process_one(data_set: dict) -> None:
-            if self.vis_all:
-                self.visualize_all(data_set)
-
-            if self.vis_symptoms:
-                self.visualize_symptoms(data_set)
-
-            # Read RGB once and reuse across individual visualizations
-            rgb_cache = None
-
-            if self.vis_organs:
-                if rgb_cache is None:
-                    rgb_cache = self.read_image(data_set['rgb'])
-                img_bgr = self.visualize_organs(
-                    self.read_image(data_set['organs'], grayscale=True),
-                    rgb_cache.copy(),
-                )
-                self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'organs/vis')
-
-            if self.vis_focus:
-                if rgb_cache is None:
-                    rgb_cache = self.read_image(data_set['rgb'])
-                img_bgr = self.visualize_focus(
-                    self.read_image(data_set['focus'], grayscale=True),
-                    rgb_cache.copy(),
-                )
-                self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'focus/vis')
-
-            if self.vis_symptoms_det:
-                if rgb_cache is None:
-                    rgb_cache = self.read_image(data_set['rgb'])
-                img_bgr = self.visualize_symptoms_det(
-                    self.read_image(data_set['symptoms_det'], grayscale=True),
-                    rgb_cache.copy(),
-                )
-                self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_det/vis')
-
-            if self.vis_symptoms_seg:
-                if rgb_cache is None:
-                    rgb_cache = self.read_image(data_set['rgb'])
-                img_bgr = self.visualize_symptoms_seg(
-                    self.read_image(data_set['symptoms_seg'], grayscale=True),
-                    rgb_cache.copy(),
-                )
-                self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_seg/vis')
+            # Read RGB once and reuse across visualizations (no preprocessing in base Visualizer)
+            rgb_cache = self.read_image(data_set['rgb'])
+            self._process_one_base(data_set, rgb_cache)
 
         max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -326,7 +295,7 @@ class Visualizer:
             for future in tqdm(as_completed(futures), total=len(futures)):
                 future.result()
 
-    def visualize_all(self, data_set: dict) -> None:
+    def visualize_all(self, data_set: dict, img_bgr: np.array = None) -> None:
         """
         Creates a composite visualization with all predictions.
 
@@ -334,12 +303,12 @@ class Visualizer:
             data_set (dict): A dictionary of file paths to predictions and RGB image.
         """
 
-        predictions = {'img_bgr': self.read_image(data_set['rgb']),
-                       'organs': self.read_image(data_set['organs'], grayscale=True),
-                       'focus': self.read_image(data_set['focus'], grayscale=True),
-                       'symptoms_det': self.read_image(data_set['symptoms_det'], grayscale=True),
-                       'symptoms_seg': self.read_image(data_set['symptoms_seg'], grayscale=True),
-                       }
+        predictions = {'img_bgr': img_bgr if img_bgr is not None else self.read_image(data_set['rgb']),
+                   'organs': self.read_image(data_set['organs'], grayscale=True),
+                   'focus': self.read_image(data_set['focus'], grayscale=True),
+                   'symptoms_det': self.read_image(data_set['symptoms_det'], grayscale=True),
+                   'symptoms_seg': self.read_image(data_set['symptoms_seg'], grayscale=True),
+                   }
 
         if self.visualize_acceptance:
             predictions = self.combine_predictions(predictions)
@@ -356,7 +325,7 @@ class Visualizer:
         # save the results
         self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'visualization_combined')
 
-    def visualize_symptoms(self, data_set: dict) -> None:
+    def visualize_symptoms(self, data_set: dict, img_bgr: np.array = None) -> None:
         """
         Creates a composite visualization of symptoms detections and symptoms segmentation.
 
@@ -364,10 +333,10 @@ class Visualizer:
             data_set (dict): A dictionary of file paths to predictions and RGB image.
         """
 
-        predictions = {'img_bgr': self.read_image(data_set['rgb']),
-                       'symptoms_det': self.read_image(data_set['symptoms_det'], grayscale=True),
-                       'symptoms_seg': self.read_image(data_set['symptoms_seg'], grayscale=True),
-                       }
+        predictions = {'img_bgr': img_bgr if img_bgr is not None else self.read_image(data_set['rgb']),
+                   'symptoms_det': self.read_image(data_set['symptoms_det'], grayscale=True),
+                   'symptoms_seg': self.read_image(data_set['symptoms_seg'], grayscale=True),
+                   }
         
         img_bgr = predictions['img_bgr']
 
@@ -376,6 +345,44 @@ class Visualizer:
 
         # save the results
         self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'visualization_symptoms')
+
+    def _process_one_base(self, data_set: dict, rgb_cache: np.array) -> None:
+        """
+        Shared visualization logic for a single dataset given a prepared BGR image `rgb_cache`.
+        """
+        if self.vis_all:
+            self.visualize_all(data_set, img_bgr=rgb_cache)
+
+        if self.vis_symptoms:
+            self.visualize_symptoms(data_set, img_bgr=rgb_cache)
+
+        if self.vis_organs:
+            img_bgr = self.visualize_organs(
+                self.read_image(data_set['organs'], grayscale=True),
+                rgb_cache.copy(),
+            )
+            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'organs/vis')
+
+        if self.vis_focus:
+            img_bgr = self.visualize_focus(
+                self.read_image(data_set['focus'], grayscale=True),
+                rgb_cache.copy(),
+            )
+            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'focus/vis')
+
+        if self.vis_symptoms_det:
+            img_bgr = self.visualize_symptoms_det(
+                self.read_image(data_set['symptoms_det'], grayscale=True),
+                rgb_cache.copy(),
+            )
+            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_det/vis')
+
+        if self.vis_symptoms_seg:
+            img_bgr = self.visualize_symptoms_seg(
+                self.read_image(data_set['symptoms_seg'], grayscale=True),
+                rgb_cache.copy(),
+            )
+            self.save_visualization(str(Path(data_set['rgb']).stem), img_bgr, 'symptoms_seg/vis')
 
     def read_image(self, path: str | Path, grayscale: bool = False, bgr: bool = True) -> np.array:
         """
@@ -646,7 +653,9 @@ class CanopyVisualizer(Visualizer):
     """
     A derived visualizer class overloading some default values to simplify the visualization of typical canopy scenario.
     """
-    def __init__(self, vis_all: bool = True, 
+    def __init__(self, 
+                 config_path: str = 'config', config_name: str = 'canopy_portrait', preprocessing_params: Union[dict, None] = None,
+                 vis_all: bool = True, 
                  vis_symptoms: bool = True, 
                  visualize_acceptance: bool = True, 
                  vis_organs: bool = True, 
@@ -666,44 +675,89 @@ class CanopyVisualizer(Visualizer):
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
         are adjusted to cover the canopy visualization use case.
 
-        Args:
-            vis_all (bool): If True, visualize all available predictions.
-            vis_symptoms (bool): If True, symptom segmentation and symptom detection will be combined.
-            visualize_acceptance (bool): Whether to distinguish between accepted and rejected predictions.
-            vis_organs (bool): Visualize organ segmentation predictions.
-            vis_focus (bool): Visualize image focus predictions.
-            vis_symptoms_det (bool): Visualize detected symptoms.
-            vis_symptoms_seg (bool): Visualize segmented symptoms.
-            src_root (str): Root directory containing prediction outputs.
-            rgb_root (str): Directory containing original RGB images.
-            export_root (str): Directory where visualizations will be saved.
-            organs_subfolder (str): Path to organ predictions.
-            focus_subfolder (str): Path to focus predictions.
-            symptoms_det_subfolder (str): Path to symptom detection predictions.
-            symptoms_seg_subfolder (str): Path to symptom segmentation predictions.
+        
+        config_path (str, optional): relative path from the location of this file to a config directory. 
+            Defaults to "config".
+        config_name (str, optional): name of a config within the config_path directory. 
+            New configurations can be added. Defaults to "canopy_portrait".
         """
 
-        super().__init__(vis_all, 
-                         vis_symptoms, 
-                         visualize_acceptance, 
-                         vis_organs, vis_focus, 
-                         vis_symptoms_det, 
-                         vis_symptoms_seg, 
-                         vis_background, 
-                         src_root, 
-                         rgb_root, 
-                         export_root, 
-                         organs_subfolder, 
-                         focus_subfolder, 
-                         symptoms_det_subfolder, 
-                         symptoms_seg_subfolder
-                         )
+        # canopy-specific parameters for preprocessing (rotation/crop)
+        self.config_path=config_path
+        self.config_name=config_name
+        self.preprocessing_params=preprocessing_params
+
+        super().__init__(
+            vis_all=vis_all,
+            vis_symptoms=vis_symptoms,
+            visualize_acceptance=visualize_acceptance,
+            vis_organs=vis_organs,
+            vis_focus=vis_focus,
+            vis_symptoms_det=vis_symptoms_det,
+            vis_symptoms_seg=vis_symptoms_seg,
+            vis_background=vis_background,
+            src_root=src_root,
+            rgb_root=rgb_root,
+            export_root=export_root,
+            organs_subfolder=organs_subfolder,
+            focus_subfolder=focus_subfolder,
+            symptoms_det_subfolder=symptoms_det_subfolder,
+            symptoms_seg_subfolder=symptoms_seg_subfolder,
+        )
+
+    def visualize(self) -> None:
+        """
+        Override of base visualize that applies preprocessing (rotation/crop) before visualization.
+        """
+        data = self.map_data()
+
+        logging.info(f"Visualizing (canopy): {len(data)} images")
+
+        # build preprocessor from config if present
+        preproc = Preprocessor()
+        if self.preprocessing_params:
+            cfg = self.preprocessing_params
+            crop_sz = tuple(cfg.get('crop_sz')) if cfg.get('crop_sz') else None
+            crop_offsets = tuple(cfg.get('crop_offsets')) if cfg.get('crop_offsets') else None
+            if crop_sz is not None:
+                preproc.crop_sz = crop_sz
+            if crop_offsets is not None:
+                preproc.crop_offsets = crop_offsets
+
+        def _process_one_canopy(data_set: dict) -> None:
+            # read original and apply preproc
+            orig_bgr = self.read_image(data_set['rgb'])
+            try:
+                orig_rgb = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2RGB)
+            except Exception:
+                orig_rgb = orig_bgr
+
+            proc_out = preproc.preprocess_image(orig_rgb)
+            img_proc = proc_out[0] if isinstance(proc_out, tuple) else proc_out
+            if img_proc is None:
+                img_proc = orig_rgb
+
+            try:
+                rgb_cache = cv2.cvtColor(img_proc, cv2.COLOR_RGB2BGR)
+            except Exception:
+                rgb_cache = img_proc
+
+            # delegate to base processing
+            self._process_one_base(data_set, rgb_cache)
+
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                future.result()
+
 
 class FlattenedVisualizer(Visualizer):
     """
     A derived visualizer class overloading some default values to simplify the visualization of typical flattened leaves scenario.
     """
     def __init__(self, 
+                 config_path: str = 'config', config_name: str = 'flattened_leaves', preprocessing_params: Union[dict, None] = None,
                  vis_all: bool = False, 
                  vis_symptoms: bool = True, 
                  visualize_acceptance: bool = False, 
@@ -722,41 +776,29 @@ class FlattenedVisualizer(Visualizer):
                  ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
-        are adjusted to cover the canopy visualization use case.
-
-        Args:
-            vis_all (bool): If True, visualize all available predictions.
-            vis_symptoms (bool): If True, symptom segmentation and symptom detection will be combined.
-            visualize_acceptance (bool): Whether to distinguish between accepted and rejected predictions.
-            vis_organs (bool): Visualize organ segmentation predictions.
-            vis_focus (bool): Visualize image focus predictions.
-            vis_symptoms_det (bool): Visualize detected symptoms.
-            vis_symptoms_seg (bool): Visualize segmented symptoms.
-            src_root (str): Root directory containing prediction outputs.
-            rgb_root (str): Directory containing original RGB images.
-            export_root (str): Directory where visualizations will be saved.
-            organs_subfolder (str): Path to organ predictions.
-            focus_subfolder (str): Path to focus predictions.
-            symptoms_det_subfolder (str): Path to symptom detection predictions.
-            symptoms_seg_subfolder (str): Path to symptom segmentation predictions.
+        are adjusted to cover the flattened leaves visualization use case.
         """
 
-        super().__init__(vis_all, 
-                         vis_symptoms, 
-                         visualize_acceptance, 
-                         vis_organs, 
-                         vis_focus, 
-                         vis_symptoms_det, 
-                         vis_symptoms_seg, 
-                         vis_background,
-                         src_root, 
-                         rgb_root, 
-                         export_root, 
-                         organs_subfolder, 
-                         focus_subfolder, 
-                         symptoms_det_subfolder, 
-                         symptoms_seg_subfolder,
-                         )
+        super().__init__(
+            config_path=config_path,
+            config_name=config_name,
+            preprocessing_params=preprocessing_params,
+            vis_all=vis_all,
+            vis_symptoms=vis_symptoms,
+            visualize_acceptance=visualize_acceptance,
+            vis_organs=vis_organs,
+            vis_focus=vis_focus,
+            vis_symptoms_det=vis_symptoms_det,
+            vis_symptoms_seg=vis_symptoms_seg,
+            vis_background=vis_background,
+            src_root=src_root,
+            rgb_root=rgb_root,
+            export_root=export_root,
+            organs_subfolder=organs_subfolder,
+            focus_subfolder=focus_subfolder,
+            symptoms_det_subfolder=symptoms_det_subfolder,
+            symptoms_seg_subfolder=symptoms_seg_subfolder,
+        )
 
 def save_image(path: str, image: np.array, color_convert: int = None) -> None:
     """
