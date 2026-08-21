@@ -30,7 +30,7 @@ elif ROOT_SERVER.exists():
 else:
     raise FileNotFoundError("Could not find PreDiMix root directory.")
 
-# list all directories in the root directory that match the date format and do not contain certain substrings
+# list all plot directories in the data structure
 SITE_DIRS = [d for d in ROOT.iterdir() if d.is_dir()]
 DATE_DIRS = [
     d
@@ -44,15 +44,27 @@ CAMERA_DIRS = [
     for d in date_dir.iterdir()
     if d.is_dir() and d.name.startswith("Camera")
 ]
+PLOT_DIRS = [
+    d
+    for plot_dir in CAMERA_DIRS
+    for d in plot_dir.iterdir()
+    if d.is_dir() and re.fullmatch(r"[A-Za-z0-9]{8}", d.name)
+]
 
 # initialize predictor with the 'canopy_portrait_2' configuration
 pred = Predictor(config_name='canopy_portrait_2')
 
-# predict
-for d in CAMERA_DIRS:
+# predict each plot directory, skipping those that have already been processed
+for d in PLOT_DIRS:
+
+    export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
+    if export_dst.exists():
+        print(f"Skipping, output already exists: {export_dst}")
+        continue
+
     pred.predict(
         images_src=d,
-        export_dst=Path(str(d).replace("B_Data", "E_Work")) / "predictions"
+        export_dst=export_dst
     )
 
 # # visualize
