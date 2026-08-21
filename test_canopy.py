@@ -1,3 +1,5 @@
+import os
+
 from leaf import get_model_urls_for_config, download_models_for_config
 from leaf import models
 from leaf.visualization import CanopyVisualizer
@@ -51,11 +53,16 @@ PLOT_DIRS = [
     if d.is_dir() and re.fullmatch(r"[A-Za-z0-9]{8}", d.name)
 ]
 
+# split up list of plots into task lists to assign to different GPUs
+task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+num_tasks = int(os.environ["SLURM_ARRAY_TASK_COUNT"])
+PLOT_DIRS_TASK = PLOT_DIRS[task_id::num_tasks]
+
 # initialize predictor with the 'canopy_portrait_2' configuration
 pred = Predictor(config_name='canopy_portrait_2')
 
 # predict each plot directory, skipping those that have already been processed
-for d in PLOT_DIRS:
+for d in PLOT_DIRS_TASK:
 
     export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
     if export_dst.exists():
