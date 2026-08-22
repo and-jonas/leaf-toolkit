@@ -6,6 +6,7 @@ from leaf.visualization import CanopyVisualizer
 from leaf.inference import Predictor
 from pathlib import Path
 import re
+from tqdm import tqdm
 
 # # pre-download models, default canopy_portrait
 # downloaded = download_models_for_config()
@@ -62,7 +63,12 @@ PLOT_DIRS_TASK = PLOT_DIRS[task_id::num_tasks]
 pred = Predictor(config_name='canopy_portrait_2')
 
 # predict each plot directory, skipping those that have already been processed
-for d in PLOT_DIRS_TASK:
+for d in tqdm(
+    PLOT_DIRS_TASK, 
+    desc=f"Task {task_id}",
+    position=task_id,
+    leave=True
+    ):
 
     export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
     if export_dst.exists():
