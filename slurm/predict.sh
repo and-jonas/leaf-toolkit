@@ -2,9 +2,9 @@
 
 #SBATCH --job-name=canopy_predict
 #SBATCH --partition=gpu
-#SBATCH --array=0-1
+#SBATCH --array=0-3
 #SBATCH --gpus=1
-#SBATCH --time=10:00:00
+#SBATCH --time=48:00:00
 #SBATCH --output=%x_%A_%a_%N.log
 #SBATCH --mem=16G
 #SBATCH --cpus-per-task=4
@@ -20,5 +20,13 @@ nvidia-smi
 cd ~/leaf-toolkit
 source .venv/bin/activate
 
-echo "Running: python 04_predict.py ${SLURM_ARRAY_TASK_ID}"
-python predict.py $SLURM_ARRAY_TASK_ID
+echo "Running: python test_canopy.py ${SLURM_ARRAY_TASK_ID}"
+python -u test_canopy.py $SLURM_ARRAY_TASK_ID
+
+EXIT_CODE=$?
+
+echo "Python exit code: $EXIT_CODE"
+
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "Python process failed!"
+fi
