@@ -81,15 +81,15 @@ else:
 #         export_dst=export_dst
 #     )
 
-# # get metrics for each plot directory
-# for d in tqdm(
-#     PLOT_DIRS_TASK, 
-#     desc=f"Task {task_id}",
-#     position=task_id,
-#     leave=True
-#     ):
-#     export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
-#     canopy_evaluation_wrapper(root_folder=export_dst, results_path=export_dst / 'canopy_results.csv')
+# get metrics for each plot directory
+for d in tqdm(
+    PLOT_DIRS_TASK, 
+    desc=f"Task {task_id}",
+    position=task_id,
+    leave=True
+    ):
+    export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
+    canopy_evaluation_wrapper(root_folder=export_dst, results_path=export_dst / 'canopy_results.csv')
 
 
 # visualize
