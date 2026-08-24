@@ -672,6 +672,7 @@ class CanopyVisualizer(Visualizer):
                  focus_subfolder: str = 'focus/pred', 
                  symptoms_det_subfolder: str = 'symptoms_det/pred', 
                  symptoms_seg_subfolder: str = 'symptoms_seg/pred',
+                 sample_step: int = 1
                  ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
@@ -700,6 +701,7 @@ class CanopyVisualizer(Visualizer):
             focus_subfolder=focus_subfolder,
             symptoms_det_subfolder=symptoms_det_subfolder,
             symptoms_seg_subfolder=symptoms_seg_subfolder,
+            sample_step=sample_step,
         )
 
         # load base config
@@ -780,6 +782,7 @@ class FlattenedVisualizer(Visualizer):
                  focus_subfolder: str = 'focus/pred', 
                  symptoms_det_subfolder: str = 'symptoms_det/pred', 
                  symptoms_seg_subfolder: str = 'symptoms_seg/pred',
+                 sample_step: int = 1
                  ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
@@ -805,6 +808,7 @@ class FlattenedVisualizer(Visualizer):
             focus_subfolder=focus_subfolder,
             symptoms_det_subfolder=symptoms_det_subfolder,
             symptoms_seg_subfolder=symptoms_seg_subfolder,
+            sample_step=sample_step,
         )
 
 def save_image(path: str, image: np.array, color_convert: int = None) -> None:
