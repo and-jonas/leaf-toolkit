@@ -107,4 +107,4 @@ for d in tqdm(
         export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
         sample_step=15
         )
-    vis.visualize(parallel=False)
+    vis.visualize(parallel=True)
