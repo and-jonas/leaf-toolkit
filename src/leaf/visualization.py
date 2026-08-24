@@ -294,8 +294,7 @@ class Visualizer:
             rgb_cache = self.read_image(data_set['rgb'])
             self._process_one_base(data_set, rgb_cache)
 
-        # max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
-        max_workers = 4
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() - 4 or 1)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_process_one, data_set) for data_set in data]
             for future in tqdm(as_completed(futures), total=len(futures)):
@@ -744,8 +743,8 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        # max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 4))
-        max_workers = 8
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() - 4 or 1)))
+        # max_workers = 8
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
