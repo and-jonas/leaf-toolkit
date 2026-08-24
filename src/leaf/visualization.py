@@ -248,7 +248,7 @@ class Visualizer:
 
         # apply subsampling if requested (every n-th image)
         if getattr(self, 'sample_step', 1) and int(self.sample_step) > 1:
-            data_container = data_container[:: int(self.sample_step)]
+            data_container = data_container[4:: int(self.sample_step)]
 
         return data_container
 

@@ -49,6 +49,8 @@ PLOT_DIRS = [
     if d.is_dir() and re.fullmatch(r"[A-Za-z0-9]{8}", d.name)
 ]
 
+print(f'found {len(PLOT_DIRS)} plot directories to process')
+
 # split up list of plots into task lists to assign to different GPUs, if available
 if "SLURM_ARRAY_TASK_ID" in os.environ and "SLURM_ARRAY_TASK_COUNT" in os.environ:
     task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
@@ -105,4 +107,4 @@ for d in tqdm(
         export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
         sample_step=15
         )
-    vis.visualize(parallel=True)
+    vis.visualize(parallel=False)
