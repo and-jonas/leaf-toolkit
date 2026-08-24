@@ -4,6 +4,7 @@ from leaf import get_model_urls_for_config, download_models_for_config
 from leaf import models
 from leaf.visualization import CanopyVisualizer
 from leaf.inference import Predictor
+from leaf.metrics import canopy_evaluation_wrapper
 from pathlib import Path
 import re
 from tqdm import tqdm
@@ -80,13 +81,30 @@ for d in tqdm(
         export_dst=export_dst
     )
 
-# # visualize
-# for d in CAMERA_DIRS:
-#     print(d)
-#     vis = CanopyVisualizer(
-#         config_path="config", config_name='canopy_portrait_2',
-#         vis_all=True,
-#         src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
-#         rgb_root=d,
-#         export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions")
-#     vis.visualize(parallel=True)
+# predict each plot directory, skipping those that have already been processed
+for d in tqdm(
+    PLOT_DIRS_TASK, 
+    desc=f"Task {task_id}",
+    position=task_id,
+    leave=True
+    ):
+    export_dst = Path(str(d).replace("B_Data", "E_Work"))
+    canopy_evaluation_wrapper(root_folder=export_dst, results_path=export_dst / 'canopy_results.csv')
+
+
+# visualize
+for d in tqdm(
+    PLOT_DIRS_TASK, 
+    desc=f"Task {task_id}",
+    position=task_id,
+    leave=True
+    ):
+    vis = CanopyVisualizer(
+        config_path="config", config_name='canopy_portrait_2',
+        vis_all=True,
+        src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
+        rgb_root=d,
+        export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
+        sample_step=15
+        )
+    vis.visualize(parallel=True)

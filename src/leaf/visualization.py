@@ -127,7 +127,8 @@ class Visualizer:
             organs_subfolder: str = 'organs/pred',
             focus_subfolder: str = 'focus/pred',
             symptoms_det_subfolder: str = 'symptoms_det/pred',
-            symptoms_seg_subfolder: str = 'symptoms_seg/pred'
+            symptoms_seg_subfolder: str = 'symptoms_seg/pred', 
+            sample_step: int = 1
         ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized.
@@ -168,7 +169,7 @@ class Visualizer:
         self.symptoms_det_subfolder = symptoms_det_subfolder
         self.symptoms_seg_subfolder = symptoms_seg_subfolder
 
-        # base Visualizer does not accept preprocessing parameters
+        self.sample_step = int(sample_step) if sample_step is not None else 1
 
     def map_data(self) -> list[dict]:
         """
@@ -244,6 +245,10 @@ class Visualizer:
                 continue
             else:
                 print("Filenames are different:", filenames)
+
+        # apply subsampling if requested (every n-th image)
+        if getattr(self, 'sample_step', 1) and int(self.sample_step) > 1:
+            data_container = data_container[:: int(self.sample_step)]
 
         return data_container
 
