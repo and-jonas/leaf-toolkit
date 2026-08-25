@@ -60,51 +60,51 @@ else:
     PLOT_DIRS_TASK = PLOT_DIRS
     task_id = 0
 
-# # initialize predictor with the 'canopy_portrait_2' configuration
-# pred = Predictor(config_name='canopy_portrait_2')
+# initialize predictor with the 'canopy_portrait_2' configuration
+pred = Predictor(config_name='canopy_portrait_temp')
 
-# # predict each plot directory, skipping those that have already been processed
+# predict each plot directory, skipping those that have already been processed
+for d in tqdm(
+    PLOT_DIRS_TASK, 
+    desc=f"Task {task_id}",
+    position=task_id,
+    leave=True
+    ):
+
+    export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
+    if export_dst.exists():
+        print(f"Skipping, output already exists: {export_dst}")
+        continue
+
+    pred.predict(
+        images_src=d,
+        export_dst=export_dst
+    )
+
+# # get metrics for each plot directory
 # for d in tqdm(
 #     PLOT_DIRS_TASK, 
 #     desc=f"Task {task_id}",
 #     position=task_id,
 #     leave=True
 #     ):
-
 #     export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
-#     if export_dst.exists():
-#         print(f"Skipping, output already exists: {export_dst}")
-#         continue
-
-#     pred.predict(
-#         images_src=d,
-#         export_dst=export_dst
-#     )
-
-# get metrics for each plot directory
-for d in tqdm(
-    PLOT_DIRS_TASK, 
-    desc=f"Task {task_id}",
-    position=task_id,
-    leave=True
-    ):
-    export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
-    canopy_evaluation_wrapper(root_folder=export_dst, results_path=export_dst / 'canopy_results.csv')
+#     canopy_evaluation_wrapper(root_folder=export_dst, results_path=export_dst / 'canopy_results.csv')
 
 
-# visualize
-for d in tqdm(
-    PLOT_DIRS_TASK, 
-    desc=f"Task {task_id}",
-    position=task_id,
-    leave=True
-    ):
-    vis = CanopyVisualizer(
-        config_path="config", config_name='canopy_portrait_2',
-        vis_all=True,
-        src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
-        rgb_root=d,
-        export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
-        sample_step=15
-        )
-    vis.visualize(parallel=True)
+# # visualize
+# for d in tqdm(
+#     PLOT_DIRS_TASK, 
+#     desc=f"Task {task_id}",
+#     position=task_id,
+#     leave=True
+#     ):
+#     vis = CanopyVisualizer(
+#         config_path="config", config_name='canopy_portrait_2',
+#         vis_all=True,
+#         src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
+#         rgb_root=d,
+#         export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
+#         sample_step=15
+#         )
+#     vis.visualize(parallel=True)
