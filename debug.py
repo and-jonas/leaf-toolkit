@@ -28,26 +28,7 @@ elif ROOT_SERVER.exists():
 else:
     raise FileNotFoundError("Could not find PreDiMix root directory.")
 
-# list all plot directories in the data structure
-SITE_DIRS = [d for d in ROOT.iterdir() if d.is_dir()]
-DATE_DIRS = [
-    d
-    for site_dir in SITE_DIRS
-    for d in site_dir.iterdir()
-    if d.is_dir() and re.match(r"^\d{8}_", d.name) and not any(x in d.name for x in ["_Leaf", "_Documentation", "_Test"])
-]
-CAMERA_DIRS = [
-    d
-    for date_dir in DATE_DIRS
-    for d in date_dir.iterdir()
-    if d.is_dir() and d.name.startswith("Camera")
-]
-PLOT_DIRS = [
-    d
-    for plot_dir in CAMERA_DIRS
-    for d in plot_dir.iterdir()
-    if d.is_dir() and re.fullmatch(r"[A-Za-z0-9]{8}", d.name)
-]
+PLOT_DIRS = [ROOT / "Uitikon/20250424_Uitikon_Test/Camera0/10300827"]
 
 print(f'found {len(PLOT_DIRS)} plot directories to process')
 
@@ -60,8 +41,8 @@ else:
     PLOT_DIRS_TASK = PLOT_DIRS
     task_id = 0
 
-# initialize predictor with the 'canopy_portrait_2' configuration
-pred = Predictor(config_name='canopy_portrait_2')
+# initialize predictor with the 'canopy_portrait_temp' configuration
+pred = Predictor(config_name='canopy_portrait_temp')
 
 # predict each plot directory, skipping those that have already been processed
 for d in tqdm(
@@ -72,9 +53,9 @@ for d in tqdm(
     ):
 
     export_dst = Path(str(d).replace("B_Data", "E_Work")) / "predictions"
-    if export_dst.exists():
-        print(f"Skipping, output already exists: {export_dst}")
-        continue
+    # if export_dst.exists():
+    #     print(f"Skipping, output already exists: {export_dst}")
+    #     continue
 
     pred.predict(
         images_src=d,
@@ -82,7 +63,7 @@ for d in tqdm(
     )
 
 # # get metrics for each plot directory
-# for d in tqdm(
+# for d in tqdm(6
 #     PLOT_DIRS_TASK, 
 #     desc=f"Task {task_id}",
 #     position=task_id,
