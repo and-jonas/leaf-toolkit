@@ -746,8 +746,7 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (os.cpu_count() or 1) - 2))
-
+        max_workers = max(1, min(len(data), int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))))
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [

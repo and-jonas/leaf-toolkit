@@ -12,11 +12,6 @@ from tqdm import tqdm
 # # pre-download models, default canopy_portrait
 # downloaded = download_models_for_config()
 
-<<<<<<< HEAD
-# from $SCRATCH to reduce I/O limitations on the server
-# ROOT_DIR = Path("O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
-ROOT_DIR = Path("/agroscope/Data-Work-CH/22_Plant_Production-CH/224_Digitalisation/Jonas_Anderegg_Files/B_Data/03_PreDiMix/Uitikon/20260521_Uitikon_Test/Camera1")
-=======
 # determine which root path to use based on existence of local or server path
 ROOT_LOCAL = Path(
     "O:/Data-Work/22_Plant_Production-CH/224_Digitalisation/"
@@ -32,7 +27,6 @@ elif ROOT_SERVER.exists():
     ROOT = ROOT_SERVER
 else:
     raise FileNotFoundError("Could not find PreDiMix root directory.")
->>>>>>> 1c5b7eb94d152cd197d5feea71dee18bc9b84b45
 
 # list all plot directories in the data structure
 SITE_DIRS = [d for d in ROOT.iterdir() if d.is_dir()]
@@ -57,18 +51,6 @@ PLOT_DIRS = [
 
 print(f'found {len(PLOT_DIRS)} plot directories to process')
 
-<<<<<<< HEAD
-# visualize
-for d in dirs_to_process:
-    print(d)
-    vis = CanopyVisualizer(
-        config_path="config", config_name='canopy_portrait_2',
-        vis_all=True,
-        src_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions",
-        rgb_root=d,
-        export_root=Path(str(d).replace("B_Data", "E_Work")) / "predictions")
-    vis.visualize(parallel=False)
-=======
 # split up list of plots into task lists to assign to different GPUs, if available
 if "SLURM_ARRAY_TASK_ID" in os.environ and "SLURM_ARRAY_TASK_COUNT" in os.environ:
     task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
@@ -126,4 +108,3 @@ for d in tqdm(
 #         sample_step=15
 #         )
 #     vis.visualize(parallel=True)
->>>>>>> 1c5b7eb94d152cd197d5feea71dee18bc9b84b45
