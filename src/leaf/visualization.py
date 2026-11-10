@@ -743,9 +743,6 @@ class CanopyVisualizer(Visualizer):
 
         logging.info(f"Visualizing (canopy): {len(data)} images")
 
-        if not data:
-            return
-
         # build preprocessor from config if present
         preproc = Preprocessor()
         if self.preprocessing_params:
@@ -807,7 +804,7 @@ class FlattenedVisualizer(Visualizer):
     A derived visualizer class overloading some default values to simplify the visualization of typical flattened leaves scenario.
     """
     def __init__(self, 
-                 config_path: str = 'config', config_name: str = 'flattened_leaves', preprocessing_params: Union[dict, None] = None,
+                #  config_path: str = 'config', config_name: str = 'flattened_leaves', preprocessing_params: Union[dict, None] = None,
                  vis_all: bool = False, 
                  vis_symptoms: bool = True, 
                  visualize_acceptance: bool = False, 
@@ -831,9 +828,9 @@ class FlattenedVisualizer(Visualizer):
         """
 
         super().__init__(
-            config_path=config_path,
-            config_name=config_name,
-            preprocessing_params=preprocessing_params,
+            # config_path=config_path,
+            # config_name=config_name,
+            # preprocessing_params=preprocessing_params,
             vis_all=vis_all,
             vis_symptoms=vis_symptoms,
             visualize_acceptance=visualize_acceptance,
