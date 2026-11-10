@@ -255,52 +255,72 @@ class Visualizer:
 
         return data_container
 
-    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']) -> list[Path]:
+    def find_images(
+        self,
+        search_root: str | Path,
+        img_extensions: list = ['.jpg', '.jpeg', '.png']
+    ) -> list[Path]:
         """
-        Recursively finds images under the specified root directory.
-
-        Args:
-            search_root (str | pathlib.Path): Directory to search.
-            img_extensions (list): List of file extensions to include.
-
-        Returns:
-            list[pathlib.Path]: Sorted list of found image paths.
+        Recursively find images with a single directory traversal.
         """
-        images = []
-        for ext in img_extensions:
-            images.extend(Path(search_root).rglob(ext))
+        root = Path(search_root)
+        extensions = {ext.lower().lstrip("*.") for ext in img_extensions}
 
-        # Deduplicate for case-insensitive filesystems (e.g. Windows)
-        dedup = {}
-        for path in images:
-            normalized = str(path.resolve()).casefold()
-            dedup[normalized] = path.resolve()
+        images = [
+            p for p in root.rglob("*")
+            if p.suffix.lower().lstrip(".") in extensions
+        ]
 
-        images = list(dedup.values())
-        # images = sorted(images)
-        images = sorted(images, key=lambda p: p.name)  # This sorts the list based on filenames instead of complete filepath
-        return images
+        return sorted(images, key=lambda p: p.name)
 
-    def visualize(self) -> None:
+    def visualize(self, parallel: bool = True, max_workers: int | None = None) -> None:
         """
-        Main method that triggers visualization of all enabled types.
+        Visualize images with optional parallel processing and progress bar.
         """
-
-        # TODO handle the naming of the export subfolders in a better way
-
         data = self.map_data()
 
         logging.info(f"Visualizing: {len(data)} images")
 
+        if not data:
+            return
+
         def _process_one(data_set: dict) -> None:
-            # Read RGB once and reuse across visualizations (no preprocessing in base Visualizer)
-            rgb_cache = self.read_image(data_set['rgb'])
+            rgb_cache = self.read_image(data_set["rgb"])
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() - 4 or 1)))
+        available_cpus = int(
+            os.environ.get(
+                "SLURM_CPUS_PER_TASK",
+                len(os.sched_getaffinity(0))
+                if hasattr(os, "sched_getaffinity")
+                else os.cpu_count() or 1
+            )
+        )
+
+        if max_workers is None:
+            max_workers = available_cpus
+
+        max_workers = max(1, min(max_workers, len(data)))
+
+        logging.info(f"Using {max_workers} workers")
+
+        if not parallel or max_workers == 1:
+            for data_set in tqdm(data, desc="Visualizing", unit="image"):
+                _process_one(data_set)
+            return
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_process_one, data_set) for data_set in data]
-            for future in tqdm(as_completed(futures), total=len(futures)):
+            futures = [
+                executor.submit(_process_one, data_set)
+                for data_set in data
+            ]
+
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Visualizing",
+                unit="image"
+            ):
                 future.result()
 
     def visualize_all(self, data_set: dict, img_bgr: np.array = None) -> None:
@@ -715,13 +735,16 @@ class CanopyVisualizer(Visualizer):
         self.preprocessing_params = config.get('preprocessing_params', None)
 
 
-    def visualize(self, parallel: bool = True) -> None:
+    def visualize(self, parallel: bool = True, max_workers: int | None = None) -> None:
         """
         Override of base visualize that applies preprocessing (rotation/crop) before visualization.
         """
         data = self.map_data()
 
         logging.info(f"Visualizing (canopy): {len(data)} images")
+
+        if not data:
+            return
 
         # build preprocessor from config if present
         preproc = Preprocessor()
@@ -746,7 +769,21 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count() or 1))))
+        available_cpus = int(
+            os.environ.get(
+                "SLURM_CPUS_PER_TASK",
+                len(os.sched_getaffinity(0))
+                if hasattr(os, "sched_getaffinity")
+                else os.cpu_count() or 1
+            )
+        )
+
+        if max_workers is None:
+            max_workers = available_cpus
+
+        max_workers = max(1, min(max_workers, len(data)))
+
+        logging.info(f"Using {max_workers} workers")
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [
