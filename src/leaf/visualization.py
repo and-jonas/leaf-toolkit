@@ -15,6 +15,9 @@ from omegaconf import OmegaConf
 from collections import defaultdict
 from leaf.preprocessing import Preprocessor
 
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 class BaseVisMap:
     """
     Base class for visualization mapping.
@@ -127,7 +130,8 @@ class Visualizer:
             organs_subfolder: str = 'organs/pred',
             focus_subfolder: str = 'focus/pred',
             symptoms_det_subfolder: str = 'symptoms_det/pred',
-            symptoms_seg_subfolder: str = 'symptoms_seg/pred'
+            symptoms_seg_subfolder: str = 'symptoms_seg/pred', 
+            sample_step: int = 1
         ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized.
@@ -168,7 +172,7 @@ class Visualizer:
         self.symptoms_det_subfolder = symptoms_det_subfolder
         self.symptoms_seg_subfolder = symptoms_seg_subfolder
 
-        # base Visualizer does not accept preprocessing parameters
+        self.sample_step = int(sample_step) if sample_step is not None else 1
 
     def map_data(self) -> list[dict]:
         """
@@ -245,9 +249,13 @@ class Visualizer:
             else:
                 print("Filenames are different:", filenames)
 
+        # apply subsampling if requested (every n-th image)
+        if getattr(self, 'sample_step', 1) and int(self.sample_step) > 1:
+            data_container = data_container[4:: int(self.sample_step)]
+
         return data_container
 
-    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '.JPG', '.JPEG', '.PNG']) -> list[Path]:
+    def find_images(self, search_root: str | Path, img_extensions: list = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']) -> list[Path]:
         """
         Recursively finds images under the specified root directory.
 
@@ -289,7 +297,7 @@ class Visualizer:
             rgb_cache = self.read_image(data_set['rgb'])
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1)))
+        max_workers = max(1, min(len(data), (__import__('os').cpu_count() - 4 or 1)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_process_one, data_set) for data_set in data]
             for future in tqdm(as_completed(futures), total=len(futures)):
@@ -666,6 +674,7 @@ class CanopyVisualizer(Visualizer):
                  focus_subfolder: str = 'focus/pred', 
                  symptoms_det_subfolder: str = 'symptoms_det/pred', 
                  symptoms_seg_subfolder: str = 'symptoms_seg/pred',
+                 sample_step: int = 1
                  ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
@@ -694,6 +703,7 @@ class CanopyVisualizer(Visualizer):
             focus_subfolder=focus_subfolder,
             symptoms_det_subfolder=symptoms_det_subfolder,
             symptoms_seg_subfolder=symptoms_seg_subfolder,
+            sample_step=sample_step,
         )
 
         # load base config
@@ -736,12 +746,21 @@ class CanopyVisualizer(Visualizer):
             # delegate to base processing
             self._process_one_base(data_set, rgb_cache)
 
-        max_workers = max(1, min(len(data), (__import__('os').cpu_count() or 1) - 2))
+        max_workers = max(1, min(len(data), (os.cpu_count() or 1) - 2))
+
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [executor.submit(_process_one_canopy, data_set) for data_set in data]
+                futures = [
+                    executor.submit(_process_one_canopy, data_set)
+                    for data_set in data
+                ]
+
                 for future in tqdm(as_completed(futures), total=len(futures)):
-                    future.result()
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"\nWorker failed: {type(e).__name__}: {e}")
+                        raise
         else:
             for data_set in tqdm(data, total=len(data)):
                 _process_one_canopy(data_set)
@@ -768,6 +787,7 @@ class FlattenedVisualizer(Visualizer):
                  focus_subfolder: str = 'focus/pred', 
                  symptoms_det_subfolder: str = 'symptoms_det/pred', 
                  symptoms_seg_subfolder: str = 'symptoms_seg/pred',
+                 sample_step: int = 1
                  ):
         """
         Initializes the visualizer with paths and flags to control what types of data are visualized. Default values 
@@ -793,6 +813,7 @@ class FlattenedVisualizer(Visualizer):
             focus_subfolder=focus_subfolder,
             symptoms_det_subfolder=symptoms_det_subfolder,
             symptoms_seg_subfolder=symptoms_seg_subfolder,
+            sample_step=sample_step,
         )
 
 def save_image(path: str, image: np.array, color_convert: int = None) -> None:
