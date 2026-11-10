@@ -1,3 +1,5 @@
+import shutil
+
 import cv2
 import numpy as np
 import torch
@@ -609,7 +611,21 @@ class SymptomsSegmentation(TorchscriptTransformer):
         Raises:
             Exception: Error when model not found
         """
-        if model_name == 'latest':
+
+        # get model from local path
+        if Path(model_name).is_file():
+            source = Path(model_name)
+            destination = Path("models") / source.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if source.resolve() != destination.resolve():
+                if not destination.exists():
+                    shutil.copy2(source, destination)
+                    logging.info(f"Model copied to: {destination}")
+                else:
+                    logging.info(f"Model already exists: {destination}")
+            self.model_path = str(destination)
+        # get model from model zoo
+        elif model_name == 'latest':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.0/seg_fpn_mitb3_tkbkocy7.torchscript')
         elif model_name == 'tracking_latest':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.1/seg_fpn_mitb2_0.001_1024_seg_tracking_v1.torchscript')
@@ -620,7 +636,7 @@ class SymptomsSegmentation(TorchscriptTransformer):
         elif model_name == 'zenkl_et_al_2025a':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v0.3.0/fpn_mitb1_v4.torchscript')
         elif model_name == 'anderegg_et_al_2024':
-            self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v0.3.1/fpn_mitb1_dsnv6.torchscript')
+            self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v0.3.1/fpn_mitb1_dsnv6.torchscript')         
         else:
             raise Exception("Unexpected Segmentation Model Name") 
 
@@ -769,6 +785,20 @@ class SymptomsDetection(BaseModel):
         Raises:
             Exception: Error when model not found
         """
+        
+        # get model from local path
+        if Path(model_name).is_file():
+            source = Path(model_name)
+            destination = Path("models") / source.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if source.resolve() != destination.resolve():
+                if not destination.exists():
+                    shutil.copy2(source, destination)
+                    logging.info(f"Model copied to: {destination}")
+                else:
+                    logging.info(f"Model already exists: {destination}")
+            self.model_path = str(destination)
+        # get model from model zoo
         if model_name == 'latest':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.0/yolo11l-pose_t11z7ymj.pt')
         elif model_name == 'tracking_latest':
