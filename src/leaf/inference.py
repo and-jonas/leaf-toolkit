@@ -1,6 +1,6 @@
 import logging
 import torch
-from typing import Union
+from typing import Union, Literal
 
 from hydra import compose, initialize
 from omegaconf import OmegaConf
@@ -83,7 +83,8 @@ class Predictor:
         if focus_params is not None:
             self.focus_params.update(focus_params)
         
-    def predict(self, images_src: str, export_dst: str) -> None:
+    def predict(self, images_src: str, export_dst: str,
+                on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """
         This method provides a simple interface to predict on images from a specified folder and 
         save the results to a specified location.
@@ -91,7 +92,12 @@ class Predictor:
         Args:
             images_src (str): Path to location of images.
             export_dst (str): Path where the results should be saved.
+            on_output_exists (Literal['overwrite', 'skip', 'error'], optional): Policy for how to
+                handle cases where an output file already exists for a source image. Defaults to 'overwrite'.
         """
+
+        if on_output_exists not in ('overwrite', 'skip', 'error'):
+            raise ValueError("on_output_exists must be one of: 'overwrite', 'skip', 'error'.")
 
         logging.info("Predicting ...")
         logging.info("Emptying CUDA cache")
@@ -160,6 +166,6 @@ class Predictor:
 
             # pass processed image to each model (models decide their own per-image and per-patch preprocessing)
             for name, model in models.items():
-                model.predict_from_array(img_proc, file)
+                model.predict_from_array(img_proc, file, on_output_exists=on_output_exists)
                               
         logging.info("Predicting finished")
