@@ -153,6 +153,16 @@ class Predictor:
 
         for file in files:
             logging.debug(f"Processing {file}")
+
+            # fast pre-check to avoid expensive I/O if all outputs already exist
+            models_to_run = []
+            for name, model in models.items():
+                if model.should_process_image(file, on_output_exists=on_output_exists):
+                    models_to_run.append((name, model))
+
+            if len(models_to_run) == 0:
+                continue
+
             img = cv2.imread(str(file))
             if img is None:
                 logging.error(f"Failed to read {file}")
@@ -166,7 +176,8 @@ class Predictor:
                 img_proc = img
 
             # pass processed image to each model (models decide their own per-image and per-patch preprocessing)
-            for name, model in models.items():
-                model.predict_from_array(img_proc, file, on_output_exists=on_output_exists)
+            for name, model in models_to_run:
+                # Existence policy was already resolved above for this file/model.
+                model.predict_from_array(img_proc, file, on_output_exists='overwrite')
                               
         logging.info("Predicting finished")

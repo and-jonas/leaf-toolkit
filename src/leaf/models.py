@@ -252,6 +252,14 @@ class BaseModel:
 
         raise ValueError("on_output_exists must be one of: 'overwrite', 'skip', 'error'.")
 
+    def should_process_image(self, src: Path, on_output_exists: Literal['overwrite', 'skip', 'error']) -> bool:
+        """Public wrapper to check whether a source image should be processed.
+
+        This allows callers to skip expensive image loading/preprocessing when
+        output-exists policy indicates no work is required.
+        """
+        return self._should_process_image(src, on_output_exists)
+
     
     def subdivide_image(self, image: np.array, src: Path) -> np.array:
         """
