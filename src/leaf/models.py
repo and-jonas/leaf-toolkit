@@ -845,7 +845,7 @@ class SymptomsDetection(BaseModel):
                     logging.info(f"Model already exists: {destination}")
             self.model_path = str(destination)
         # get model from model zoo
-        if model_name == 'latest':
+        elif model_name == 'latest':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.0/yolo11l-pose_t11z7ymj.pt')
         elif model_name == 'tracking_latest':
             self.model_path = self.download_file('https://github.com/RadekZenkl/leaf-models/releases/download/v1.0.1/yolo11m-pose-key_tracking_v2.pt')
