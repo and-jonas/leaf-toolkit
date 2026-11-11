@@ -104,16 +104,14 @@ class Predictor:
         torch.cuda.empty_cache()
         
 
-        # instantiate single preprocessor (rotate/crop) and models
-        # allow per-config image crop parameters under `module_params['preprocessing']`
+        # instantiate preprocessor only when crop settings are configured
         preproc_cfg = self.preprocessing_params if self.preprocessing_params else {}
         crop_sz = tuple(preproc_cfg.get('crop_sz')) if preproc_cfg.get('crop_sz') else None
         crop_offsets = tuple(preproc_cfg.get('crop_offsets')) if preproc_cfg.get('crop_offsets') else None
-        preproc = Preprocessor()
-        if crop_sz is not None:
-            preproc.crop_sz = crop_sz
-        if crop_offsets is not None:
-            preproc.crop_offsets = crop_offsets
+        do_preprocessing = crop_sz is not None and crop_offsets is not None
+        preproc = None
+        if do_preprocessing:
+            preproc = Preprocessor(crop_sz=crop_sz, crop_offsets=crop_offsets)
 
         models = {}
         if self.module_params.get('symptoms_det'):
@@ -161,8 +159,11 @@ class Predictor:
                 continue
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # run module-agnostic preprocessing once
-            img_proc = preproc.preprocess_image(img)
+            # run module-agnostic preprocessing once (only when configured)
+            if do_preprocessing:
+                img_proc = preproc.preprocess_image(img)
+            else:
+                img_proc = img
 
             # pass processed image to each model (models decide their own per-image and per-patch preprocessing)
             for name, model in models.items():
