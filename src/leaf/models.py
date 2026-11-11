@@ -18,7 +18,7 @@ from tqdm import tqdm
 from skimage.util import view_as_blocks
 import psutil
 import matplotlib.pyplot as plt
-from typing import Union, Tuple
+from typing import Union, Tuple, Literal
 
 from leaf.visualization import save_histogram, save_depth_overlay, save_image
 
@@ -93,30 +93,37 @@ class BaseModel:
         
         raise NotImplementedError
 
-    def predict(self, src: str) -> None:
+    def predict(self, src: str, on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """
         Predicts on a folder or file. Uses pathlib Path internally
 
         Args:
             src (str): Path to a specific file or folder
+            on_output_exists (Literal['overwrite', 'skip', 'error'], optional): Policy for how to handle
+                cases where the output file for a source image already exists. Defaults to 'overwrite'.
         """
+
+        if on_output_exists not in ('overwrite', 'skip', 'error'):
+            raise ValueError("on_output_exists must be one of: 'overwrite', 'skip', 'error'.")
 
         # Check what type of a source it is
         src_path = Path(src)
 
         if 	src_path.is_file():
-            self.predict_image(src_path)
+            self.predict_image(src_path, on_output_exists=on_output_exists)
 
         elif src_path.is_dir():
-            self.predict_folder(src_path)
+            self.predict_folder(src_path, on_output_exists=on_output_exists)
 
-    def predict_folder(self, src: Path) -> None:
+    def predict_folder(self, src: Path, on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """
         This function predicts a folder. It uses recursive file search with extensions defined in the search_pattern 
             attribute.
 
         Args:
             src (pathlib.Path): Pathlib Path pointing to a folder.
+            on_output_exists (Literal['overwrite', 'skip', 'error'], optional): Policy for how to handle
+                cases where the output file for a source image already exists. Defaults to 'overwrite'.
         """
 
         raw_files = [file for ext in self.search_pattern for file in src.rglob(ext)]
@@ -131,9 +138,9 @@ class BaseModel:
         
         for file in tqdm(files):
             
-            self.predict_image(file)
+            self.predict_image(file, on_output_exists=on_output_exists)
 
-    def predict_image(self, src: Path) -> None:
+    def predict_image(self, src: Path, on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """
         Tests if a file is read successfully. Then it subdivides an image to patches according to the specified patch size.
         Then it conducts the inference and merges the results from individual patches and saves the results, if not in 
@@ -141,7 +148,12 @@ class BaseModel:
 
         Args:
             src (pathlib.Path): Pathlib Path to the image to be predicted.
+            on_output_exists (Literal['overwrite', 'skip', 'error'], optional): Policy for how to handle
+                cases where the output file for a source image already exists. Defaults to 'overwrite'.
         """
+        if not self.debug and not self._should_process_image(src, on_output_exists):
+            return
+
         # TODO this could be moved to a separate process to speed up (see pytorch datamodule)
         # it should return an iterable of images and image paths
         logging.debug("Processing File: {}".format(str(src)))
@@ -178,15 +190,18 @@ class BaseModel:
 
         # Saving predictions
         if not self.debug:
-            self.save_predictions(str(src), result)
+            self.save_predictions(str(src), result, on_output_exists=on_output_exists)
 
-    def predict_from_array(self, image: np.array, src: Path) -> None:
+    def predict_from_array(self, image: np.array, src: Path, on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """Predict from an in-memory RGB image array (image is RGB).
 
         This mirrors `predict_image` but avoids re-reading from disk so a central
         pipeline can read the image once, apply general preprocessing (rotate/crop),
         then pass the processed image to multiple modules.
         """
+        if not self.debug and not self._should_process_image(src, on_output_exists):
+            return
+
         patches = self.subdivide_image(image, src)
         if patches is None:
             logging.error(f"Skipping image: {str(src)}")
@@ -206,7 +221,36 @@ class BaseModel:
         result = self.merge_patches(results)
 
         if not self.debug:
-            self.save_predictions(str(src), result)
+            self.save_predictions(str(src), result, on_output_exists=on_output_exists)
+
+    def get_predictions_path(self, image_path: Union[str, Path]) -> Path:
+        """Build the output path (with .png suffix) for a given source image path."""
+        src = Path(image_path)
+
+        if type(self.export_pattern_pred) == str:
+            predictions_path = Path(self.export_pattern_pred) / src.name
+        elif type(self.export_pattern_pred) == tuple:
+            predictions_path = Path(str(src).replace(*self.export_pattern_pred))
+        else:
+            raise Exception("Unexpected path pattern")
+
+        return predictions_path.with_suffix('.png')
+
+    def _should_process_image(self, src: Path, on_output_exists: Literal['overwrite', 'skip', 'error']) -> bool:
+        predictions_path = self.get_predictions_path(src)
+
+        if not predictions_path.exists():
+            return True
+
+        if on_output_exists == 'overwrite':
+            return True
+        if on_output_exists == 'skip':
+            logging.info(f"Output already exists, skipping: {predictions_path}")
+            return False
+        if on_output_exists == 'error':
+            raise FileExistsError(f"Output already exists: {predictions_path}")
+
+        raise ValueError("on_output_exists must be one of: 'overwrite', 'skip', 'error'.")
 
     
     def subdivide_image(self, image: np.array, src: Path) -> np.array:
@@ -389,7 +433,8 @@ class BaseModel:
         return disposition, params
 
     
-    def save_predictions(self, image_path: str, predictions: np.array) -> None:
+    def save_predictions(self, image_path: str, predictions: np.array,
+                         on_output_exists: Literal['overwrite', 'skip', 'error'] = 'overwrite') -> None:
         """
         This function determines the save path based on the source image name and export_pattern_pred attribute. 
         Then it saves the predictions on a specified location. 
@@ -397,23 +442,24 @@ class BaseModel:
         Args:
             image_path (str): image path of the original image
             predictions (np.array): predictions array
+            on_output_exists (Literal['overwrite', 'skip', 'error'], optional): Policy for how to handle
+                cases where the output file already exists. Defaults to 'overwrite'.
 
         Raises:
             Exception: Error when the export path cannot be determined
         """
-        src = Path(image_path)
+        predictions_path = self.get_predictions_path(image_path)
 
-        # Compose appropriate Export path 
-        if type(self.export_pattern_pred) == str:
-            predictions_path = Path(self.export_pattern_pred) / src.name
-        elif type(self.export_pattern_pred) == tuple:
-            predictions_path = Path(str(src).replace(*self.export_pattern_pred))
-        else:
-            raise Exception("Unexpected path pattern")
+        if predictions_path.exists():
+            if on_output_exists == 'skip':
+                logging.info(f"Output already exists, skipping save: {predictions_path}")
+                return
+            if on_output_exists == 'error':
+                raise FileExistsError(f"Output already exists: {predictions_path}")
 
         # save predictions
         predictions_path.parents[0].mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(predictions_path.with_suffix('.png')), predictions.astype(np.uint8))
+        cv2.imwrite(str(predictions_path), predictions.astype(np.uint8))
 
     def get_model(self, model_name: str):
         """
